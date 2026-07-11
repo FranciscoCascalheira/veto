@@ -78,13 +78,14 @@ export async function POST(req: NextRequest) {
     apiKey = serverKey;
   }
 
+  const client = new Anthropic({ apiKey });
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {
       const send = (obj: unknown) =>
         controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`));
       try {
-        for await (const event of runRefutation(apiKey, thesis)) {
+        for await (const event of runRefutation(client, thesis)) {
           send(event);
         }
         send({ t: "done" });

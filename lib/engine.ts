@@ -158,11 +158,9 @@ async function structureCard(client: Anthropic, thesis: string): Promise<TradeCa
 }
 
 export async function* runRefutation(
-  apiKey: string,
+  client: Anthropic,
   thesis: string,
 ): AsyncGenerator<EngineEvent> {
-  const client = new Anthropic({ apiKey });
-
   yield { t: "stage", v: "structuring" };
   const card = await structureCard(client, thesis);
   yield { t: "card", v: card };

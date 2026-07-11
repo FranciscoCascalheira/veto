@@ -27,6 +27,15 @@ pnpm dev
 
 Open http://localhost:3000, paste a thesis, paste your Anthropic API key, submit.
 
+Or smoke-test the API directly and watch the events stream:
+
+```bash
+curl -N -X POST http://localhost:3000/api/refute \
+  -H "Content-Type: application/json" \
+  -H "x-anthropic-api-key: sk-ant-..." \
+  -d '{"thesis":"Buying CRWV around $87. CoreWeave signed a multi-billion dollar capacity deal with Meta, analyst targets sit well above $130, and AI compute demand keeps outrunning supply. Expecting +40% in 3-6 months. Out below $78."}'
+```
+
 **Bring your own key.** Your key is sent per-request in a header, used server-side for that request only, and never stored or logged. Alternatively, set `ANTHROPIC_API_KEY` in the environment to offer visitors a limited number of free runs per day (`FREE_RUNS_PER_DAY`, default 3).
 
 Built with Next.js and the Claude API (`claude-opus-4-8` with server-side web search and web fetch). One review makes a handful of model calls and up to ~13 web operations; with your own key, expect a cost in the tens of cents per review.
