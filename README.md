@@ -8,6 +8,8 @@ Trading journals analyze your trades after the fact. Veto attacks them **before 
 
 ![Veto reviewing a sample trade card and refusing it](docs/screenshot.png)
 
+**Live:** [veto-production.up.railway.app](https://veto-production.up.railway.app) — watch the sample review without a key, or bring your own Anthropic key for a real one.
+
 ## How it works
 
 1. **Structure** — your freeform thesis becomes a trade card: ticker, direction, horizon, and the falsifiable premises your argument actually depends on.
