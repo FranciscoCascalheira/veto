@@ -82,7 +82,7 @@ export default function Home() {
     }
   }
 
-  async function run() {
+  async function run(demo = false) {
     if (status === "structuring" || status === "verifying") return;
     setCard(null);
     setFeed([]);
@@ -96,9 +96,9 @@ export default function Home() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          ...(apiKey ? { "x-anthropic-api-key": apiKey } : {}),
+          ...(apiKey && !demo ? { "x-anthropic-api-key": apiKey } : {}),
         },
-        body: JSON.stringify({ thesis }),
+        body: JSON.stringify(demo ? { demo: true } : { thesis }),
       });
 
       if (!res.ok) {
@@ -162,7 +162,7 @@ export default function Home() {
             className="flex-1 rounded-md border border-edge bg-surface-2 px-3 py-2 font-mono text-xs text-foreground placeholder:text-muted/60 focus:border-accent/60 focus:outline-none"
           />
           <button
-            onClick={run}
+            onClick={() => run()}
             disabled={running || thesis.trim().length < 20}
             className="rounded-md bg-accent px-5 py-2 text-sm font-medium text-background transition-opacity disabled:opacity-40"
           >
@@ -172,7 +172,15 @@ export default function Home() {
         <p className="mt-2 text-xs text-muted">
           Bring your own key: it is sent with this request only and never stored
           server-side. Leave it empty to use the site&apos;s free daily runs, when
-          enabled.
+          enabled. No key?{" "}
+          <button
+            onClick={() => run(true)}
+            disabled={running}
+            className="underline decoration-muted/50 underline-offset-2 hover:text-foreground disabled:opacity-40"
+          >
+            Watch a sample review
+          </button>
+          .
         </p>
       </section>
 

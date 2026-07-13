@@ -6,6 +6,8 @@ Paste your investment thesis. Veto structures it into a trade card, decomposes i
 
 Trading journals analyze your trades after the fact. Veto attacks them **before you buy** — because the cheapest loss is the one you never take.
 
+![Veto reviewing a sample trade card and refusing it](docs/screenshot.png)
+
 ## How it works
 
 1. **Structure** — your freeform thesis becomes a trade card: ticker, direction, horizon, and the falsifiable premises your argument actually depends on.

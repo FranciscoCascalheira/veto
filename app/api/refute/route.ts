@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { NextRequest } from "next/server";
 import { runRefutation } from "@/lib/engine";
+import { DEMO_DELAYS, DEMO_EVENTS } from "@/lib/demo";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -42,8 +43,47 @@ function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : "Unexpected error.";
 }
 
+function demoResponse(): Response {
+  const encoder = new TextEncoder();
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  const stream = new ReadableStream({
+    async start(controller) {
+      // enqueue throws once the client disconnects; treat that as "stop".
+      const send = (obj: unknown): boolean => {
+        try {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`));
+          return true;
+        } catch {
+          return false;
+        }
+      };
+      for (const event of DEMO_EVENTS) {
+        await sleep(DEMO_DELAYS[event.t]);
+        if (!send(event)) return;
+      }
+      send({ t: "done" });
+      try {
+        controller.close();
+      } catch {
+        // already closed by disconnect
+      }
+    },
+  });
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache, no-transform",
+      Connection: "keep-alive",
+    },
+  });
+}
+
 export async function POST(req: NextRequest) {
-  const body = (await req.json().catch(() => ({}))) as { thesis?: unknown };
+  const body = (await req.json().catch(() => ({}))) as {
+    thesis?: unknown;
+    demo?: unknown;
+  };
+  if (body.demo === true) return demoResponse();
   const thesis = typeof body.thesis === "string" ? body.thesis.trim() : "";
   if (thesis.length < 20) {
     return Response.json(
@@ -82,8 +122,15 @@ export async function POST(req: NextRequest) {
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {
-      const send = (obj: unknown) =>
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`));
+      // enqueue throws once the client disconnects; swallow it so a mid-run
+      // disconnect doesn't surface as an unhandled rejection.
+      const send = (obj: unknown) => {
+        try {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`));
+        } catch {
+          // client gone — nothing left to deliver to
+        }
+      };
       try {
         for await (const event of runRefutation(client, thesis)) {
           send(event);
@@ -92,7 +139,11 @@ export async function POST(req: NextRequest) {
       } catch (err) {
         send({ t: "error", v: errorMessage(err) });
       } finally {
-        controller.close();
+        try {
+          controller.close();
+        } catch {
+          // already closed by disconnect
+        }
       }
     },
   });
