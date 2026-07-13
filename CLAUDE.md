@@ -48,27 +48,28 @@ Model: `claude-opus-4-8` with server-side `web_search_20260209` +
   `pause_turn`; verdict arrives via the strict `submit_verdict` tool call).
 - `lib/demo.ts` — canned sample review (fictional ticker Halcyon/HLCN) that
   streams without an API key.
+- `lib/history.ts` — localStorage persistence of finished reviews (no
+  accounts; transcripts shed oldest-first under quota pressure).
+- `lib/export.ts` — copy-as-Markdown serializer + canvas-drawn verdict PNG
+  (reads design tokens and font stacks from the live document).
 - `app/api/refute/route.ts` — SSE endpoint. BYOK via `x-anthropic-api-key`
   header; keyless path = FRIENDS_CODE gate → global daily cap → per-IP cap.
 - `app/page.tsx` — single-page UI reading the SSE stream.
 
-## Roadmap — v2 (decided 2026-07-13, in priority order)
+## Roadmap — v2 (decided 2026-07-13; all four SHIPPED 2026-07-13)
 
-1. **Clickable sources.** Capture `web_search_tool_result` /
-   `web_fetch_tool_result` blocks and text citations in the engine loop
-   (currently discarded), thread them through `EngineEvent`, and render real
-   source links under each premise verdict and the bear case. Trust is the
-   product's own ethos applied to itself.
-2. **Argue-back.** A reply box under the verdict: the user contests with a
-   new fact, the desk re-searches and defends or amends (verdict may flip).
-   Client-held conversation continuation — no DB. The signature feature.
-3. **Local history.** Reviews persisted in localStorage: list, reopen, and an
-   "open invalidations" panel (blessed/refused cards with their
-   `suggested_invalidation` and a re-check affordance). No accounts.
-4. **Export.** Copy-as-markdown + download-verdict-as-PNG. Shareable artifact.
+1. **Clickable sources** — shipped (`68eda86`). Real source links under each
+   premise verdict and the bear case.
+2. **Argue-back** — shipped (`28b9533`). Contest the verdict; the desk
+   re-searches and defends or amends. Client-held transcript, no DB.
+3. **Local history** — shipped (`4dd7179`). localStorage reviews: reopen
+   (still contestable), open-invalidations panel with one-click re-check,
+   transcripts shed oldest-first under quota pressure.
+4. **Export** — shipped. Copy-as-Markdown + verdict PNG drawn on canvas from
+   the live design tokens; artifacts carry date, sample marker, disclaimer.
 
-Out of scope until further notice: accounts, databases, broker integrations,
-payments, effort tiers.
+v3 is undecided — propose before building. Out of scope until further
+notice: accounts, databases, broker integrations, payments, effort tiers.
 
 ## Hard rules
 

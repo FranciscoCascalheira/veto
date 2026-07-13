@@ -18,6 +18,7 @@ Trading journals analyze your trades after the fact. Veto attacks them **before 
 4. **Verdict** — `BLESSED` or `REFUSED`. A false load-bearing premise is an automatic refusal. When in doubt, it refuses.
 5. **Argue back** — disagree? Bring a new fact and contest the verdict. The desk verifies your claim against fresh sources and defends or amends — on evidence, never on insistence. The conversation lives in your browser; nothing is stored server-side.
 6. **Local history** — finished reviews are saved in your browser (localStorage — no accounts, nothing server-side). Reopen a past review, contest it again, and track open invalidations: every verdict names the condition that should kill the trade, and re-checking it against fresh sources is one click.
+7. **Export** — copy the whole review as Markdown for your journal, or download the verdict as a PNG card. Both artifacts carry their date, a sample marker when it's the demo, and the disclaimer — they travel honestly.
 
 ## What it is not
 

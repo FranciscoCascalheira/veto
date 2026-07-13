@@ -18,6 +18,14 @@ import {
   type FeedItem,
   type StoredReview,
 } from "@/lib/history";
+import {
+  copyText,
+  downloadBlob,
+  pngFilename,
+  renderVerdictPng,
+  reviewToMarkdown,
+  type ExportReview,
+} from "@/lib/export";
 
 type Status = "idle" | "structuring" | "verifying" | "done" | "error";
 
@@ -34,6 +42,7 @@ const DEMO_RECHECK_CHALLENGE =
 type ActiveReview = {
   id: string;
   createdAt: number;
+  updatedAt: number;
   demo: boolean;
   thesis: string;
   card: TradeCard | null;
@@ -76,6 +85,8 @@ export default function Home() {
   const [challenge, setChallenge] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [history, setHistory] = useState<StoredReview[]>([]);
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
+  const [pngState, setPngState] = useState<"idle" | "working" | "saved" | "failed">("idle");
   const resultRef = useRef<HTMLDivElement>(null);
   const argueRef = useRef<HTMLDivElement>(null);
   const activeRef = useRef<ActiveReview | null>(null);
@@ -147,11 +158,12 @@ export default function Home() {
       case "done":
         // A round is history-worthy only once it produced a verdict.
         if (active && active.card && active.verdict) {
+          active.updatedAt = Date.now();
           setHistory(
             upsertReview({
               id: active.id,
               createdAt: active.createdAt,
-              updatedAt: Date.now(),
+              updatedAt: active.updatedAt,
               demo: active.demo,
               thesis: active.thesis,
               card: active.card,
@@ -206,6 +218,7 @@ export default function Home() {
     activeRef.current = {
       id: demo ? DEMO_HISTORY_ID : newReviewId(),
       createdAt: Date.now(),
+      updatedAt: Date.now(),
       demo,
       thesis: demo ? "" : thesis,
       card: null,
@@ -224,6 +237,8 @@ export default function Home() {
     setIsDemo(demo);
     setChallenge("");
     setError(null);
+    setCopyState("idle");
+    setPngState("idle");
     setStatus("structuring");
     resultRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
 
@@ -265,6 +280,7 @@ export default function Home() {
     activeRef.current = {
       id: entry.id,
       createdAt: entry.createdAt,
+      updatedAt: entry.updatedAt,
       demo: entry.demo,
       thesis: entry.thesis,
       card: entry.card,
@@ -284,6 +300,8 @@ export default function Home() {
     setIsDemo(entry.demo);
     setChallenge("");
     setError(null);
+    setCopyState("idle");
+    setPngState("idle");
     setStatus("done");
     if (scroll) resultRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
@@ -306,6 +324,48 @@ export default function Home() {
       // back in the box for a fresh full review.
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
+  }
+
+  // The displayed review, packaged for export. State reads are current at
+  // click time; the mirror supplies what the UI doesn't keep in state.
+  function buildExportReview(): ExportReview | null {
+    const active = activeRef.current;
+    if (!card || !verdict || !active) return null;
+    return {
+      card,
+      verdict,
+      verdictHistory,
+      sources,
+      feed,
+      thesis: active.thesis,
+      demo: active.demo,
+      reviewedAt: active.updatedAt,
+    };
+  }
+
+  async function copyMarkdown() {
+    const review = buildExportReview();
+    if (!review) return;
+    try {
+      await copyText(reviewToMarkdown(review));
+      setCopyState("copied");
+    } catch {
+      setCopyState("failed");
+    }
+    setTimeout(() => setCopyState("idle"), 2000);
+  }
+
+  async function downloadPng() {
+    const review = buildExportReview();
+    if (!review || pngState === "working") return;
+    setPngState("working");
+    try {
+      downloadBlob(await renderVerdictPng(review), pngFilename(review));
+      setPngState("saved");
+    } catch {
+      setPngState("failed");
+    }
+    setTimeout(() => setPngState("idle"), 2000);
   }
 
   function removeEntry(id: string) {
@@ -563,6 +623,35 @@ export default function Home() {
                 <VerdictSection title="Suggested invalidation">
                   <p className="font-mono text-xs">{verdict.suggested_invalidation}</p>
                 </VerdictSection>
+
+                <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-edge pt-4">
+                  <button
+                    onClick={() => copyMarkdown()}
+                    className={`font-mono text-[11px] uppercase tracking-wider transition-colors duration-150 hover:text-foreground ${
+                      copyState === "failed" ? "text-refused" : "text-muted"
+                    }`}
+                  >
+                    {copyState === "copied"
+                      ? "Copied"
+                      : copyState === "failed"
+                        ? "Copy failed"
+                        : "Copy as Markdown"}
+                  </button>
+                  <button
+                    onClick={() => downloadPng()}
+                    className={`font-mono text-[11px] uppercase tracking-wider transition-colors duration-150 hover:text-foreground ${
+                      pngState === "failed" ? "text-refused" : "text-muted"
+                    }`}
+                  >
+                    {pngState === "working"
+                      ? "Rendering…"
+                      : pngState === "saved"
+                        ? "Saved"
+                        : pngState === "failed"
+                          ? "Export failed"
+                          : "Download PNG"}
+                  </button>
+                </div>
               </div>
             )}
 
