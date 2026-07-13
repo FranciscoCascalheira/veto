@@ -392,9 +392,9 @@ export default function Home() {
           <section className="mt-10 space-y-6">
             <div className="flex items-center gap-3 font-mono text-xs uppercase tracking-widest text-muted">
               <StageDot active={status === "structuring"} done={card !== null} label="Structure" />
-              <span className="text-muted/40">—</span>
+              <span aria-hidden className="text-edge">—</span>
               <StageDot active={status === "verifying"} done={verdict !== null} label="Verify + attack" />
-              <span className="text-muted/40">—</span>
+              <span aria-hidden className="text-edge">—</span>
               <StageDot active={false} done={verdict !== null} label="Verdict" />
             </div>
 
