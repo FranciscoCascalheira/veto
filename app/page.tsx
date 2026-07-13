@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import type {
   EngineEvent,
   PremiseState,
+  SourceRef,
   TradeCard,
   Verdict,
 } from "@/lib/types";
@@ -31,6 +32,7 @@ export default function Home() {
   const [status, setStatus] = useState<Status>("idle");
   const [card, setCard] = useState<TradeCard | null>(null);
   const [feed, setFeed] = useState<FeedItem[]>([]);
+  const [sources, setSources] = useState<SourceRef[]>([]);
   const [verdict, setVerdict] = useState<Verdict | null>(null);
   const [error, setError] = useState<string | null>(null);
   const resultRef = useRef<HTMLDivElement>(null);
@@ -78,6 +80,9 @@ export default function Home() {
       case "fetch":
         setFeed((prev) => [...prev, { kind: "fetch", url: event.v }]);
         break;
+      case "sources":
+        setSources(event.v);
+        break;
       case "verdict":
         setVerdict(event.v);
         setStatus("done");
@@ -95,6 +100,7 @@ export default function Home() {
     if (status === "structuring" || status === "verifying") return;
     setCard(null);
     setFeed([]);
+    setSources([]);
     setVerdict(null);
     setError(null);
     setStatus("structuring");
@@ -142,6 +148,10 @@ export default function Home() {
     verdict?.premise_verdicts.find((p) => p.id === id)?.verdict ?? null;
   const evidenceFor = (id: string): string | null =>
     verdict?.premise_verdicts.find((p) => p.id === id)?.evidence ?? null;
+  const sourcesFor = (id: string): string[] =>
+    verdict?.premise_verdicts.find((p) => p.id === id)?.source_urls ?? [];
+  const sourceTitle = (url: string): string | null =>
+    sources.find((s) => s.url === url)?.title ?? null;
 
   return (
     <div className="mx-auto w-full max-w-2xl px-5 pb-24 pt-16">
@@ -265,6 +275,11 @@ export default function Home() {
                             {evidence}
                           </p>
                         )}
+                        <SourceLinks
+                          urls={sourcesFor(p.id)}
+                          titleFor={sourceTitle}
+                          className="pl-8"
+                        />
                       </li>
                     );
                   })}
@@ -325,6 +340,10 @@ export default function Home() {
 
                 <VerdictSection title="The bear case">
                   <p>{verdict.bear_case}</p>
+                  <SourceLinks
+                    urls={verdict.bear_case_source_urls ?? []}
+                    titleFor={sourceTitle}
+                  />
                 </VerdictSection>
 
                 {verdict.red_flags.length > 0 && (
@@ -381,6 +400,50 @@ export default function Home() {
         </p>
       </footer>
     </div>
+  );
+}
+
+function hostnameOf(url: string): string | null {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return null;
+  }
+}
+
+function SourceLinks({
+  urls,
+  titleFor,
+  className = "",
+}: {
+  urls: string[];
+  titleFor: (url: string) => string | null;
+  className?: string;
+}) {
+  const valid = [...new Set(urls)].filter((u) => /^https?:\/\//i.test(u));
+  if (valid.length === 0) return null;
+  return (
+    <p className={`mt-1.5 flex flex-wrap gap-x-2 gap-y-1 ${className}`}>
+      {valid.map((url) => {
+        const host = hostnameOf(url);
+        if (!host) return null;
+        return (
+          <a
+            key={url}
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            title={titleFor(url) ?? url}
+            className="inline-flex max-w-full items-baseline gap-1 rounded border border-edge bg-surface-2 px-1.5 py-0.5 font-mono text-[11px] text-muted transition-colors duration-150 hover:border-accent/40 hover:text-foreground"
+          >
+            <span className="truncate">{host}</span>
+            <span aria-hidden className="shrink-0 text-[10px]">
+              {"↗︎"}
+            </span>
+          </a>
+        );
+      })}
+    </p>
   );
 }
 

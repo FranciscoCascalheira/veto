@@ -59,6 +59,36 @@ export const DEMO_EVENTS: EngineEvent[] = [
     t: "text",
     v: "Sweep: CFO sold two weeks after the LOI. Announcement-day gap of +18% suggests the \"contract\" is partly priced in.\n",
   },
+  {
+    t: "sources",
+    v: [
+      {
+        url: "https://ir.halcyon-robotics.example/press/2026-06-12",
+        title: "Halcyon Robotics announces letter of intent with US Army",
+        cited: true,
+      },
+      {
+        url: "https://procurement.records.example/search?vendor=halcyon",
+        title: "Federal procurement records — vendor search",
+        cited: true,
+      },
+      {
+        url: "https://marketdata.example/HLCN/estimates",
+        title: "HLCN consensus estimates",
+        cited: true,
+      },
+      {
+        url: "https://exchange.example/HLCN/short-interest",
+        title: "HLCN short interest report",
+        cited: true,
+      },
+      {
+        url: "https://filings.example/halcyon/insider-transactions",
+        title: "Halcyon Robotics insider transactions",
+        cited: true,
+      },
+    ],
+  },
   { t: "stage", v: "verdict" },
   {
     t: "verdict",
@@ -69,21 +99,31 @@ export const DEMO_EVENTS: EngineEvent[] = [
           verdict: "FALSE",
           evidence:
             "The June press release announces a letter of intent, not a signed contract; no award appears in official procurement records.",
+          source_urls: [
+            "https://ir.halcyon-robotics.example/press/2026-06-12",
+            "https://procurement.records.example/search?vendor=halcyon",
+          ],
         },
         {
           id: "P2",
           verdict: "PARTIAL",
           evidence:
             "Consensus forward multiple is ~12x, not below 10x. Directionally right, overstated.",
+          source_urls: ["https://marketdata.example/HLCN/estimates"],
         },
         {
           id: "P3",
           verdict: "CONFIRMED",
           evidence: "Short interest ~31% of float per exchange data.",
+          source_urls: ["https://exchange.example/HLCN/short-interest"],
         },
       ],
       bear_case:
         "The re-rating case rests on a contract that does not exist yet. If the LOI stalls or shrinks, the stock re-prices on a broken narrative — and the squeeze fuel cuts both ways on the way down.",
+      bear_case_source_urls: [
+        "https://filings.example/halcyon/insider-transactions",
+        "https://ir.halcyon-robotics.example/press/2026-06-12",
+      ],
       red_flags: [
         "CFO sold shares two weeks after the LOI announcement.",
         "The +18% move on announcement day suggests the claimed catalyst is already partly priced in.",
@@ -107,6 +147,7 @@ export const DEMO_DELAYS: Record<EngineEvent["t"], number> = {
   text: 850,
   search: 650,
   fetch: 650,
+  sources: 300,
   verdict: 400,
   error: 0,
   done: 0,

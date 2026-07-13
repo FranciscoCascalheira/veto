@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import type { EngineEvent, TradeCard, Verdict } from "./types";
+import type { EngineEvent, SourceRef, TradeCard, Verdict } from "./types";
 import { STRUCTURE_SYSTEM, VERIFY_SYSTEM, verifyBrief } from "./prompts";
 
 const MODEL = "claude-opus-4-8";
@@ -69,6 +69,7 @@ const VERDICT_JSON_SCHEMA: Anthropic.Messages.Tool.InputSchema = {
   required: [
     "premise_verdicts",
     "bear_case",
+    "bear_case_source_urls",
     "red_flags",
     "verdict",
     "verdict_reason",
@@ -81,7 +82,7 @@ const VERDICT_JSON_SCHEMA: Anthropic.Messages.Tool.InputSchema = {
       items: {
         type: "object",
         additionalProperties: false,
-        required: ["id", "verdict", "evidence"],
+        required: ["id", "verdict", "evidence", "source_urls"],
         properties: {
           id: { type: "string", description: "Premise id from the card (P1, P2, ...)." },
           verdict: {
@@ -93,12 +94,24 @@ const VERDICT_JSON_SCHEMA: Anthropic.Messages.Tool.InputSchema = {
             description:
               "What fresh sources showed, naming the sources. For UNVERIFIABLE, what was searched and not found.",
           },
+          source_urls: {
+            type: "array",
+            items: { type: "string" },
+            description:
+              "URLs of the sources this classification rests on, copied verbatim from search or fetch results used in this review. Never construct, guess, or shorten a URL. Empty when no source was used (e.g. UNVERIFIABLE with nothing found).",
+          },
         },
       },
     },
     bear_case: {
       type: "string",
       description: "The strongest argument against this thesis, stated plainly.",
+    },
+    bear_case_source_urls: {
+      type: "array",
+      items: { type: "string" },
+      description:
+        "URLs supporting the bear case and adversarial sweep findings, copied verbatim from search or fetch results used in this review. Never construct, guess, or shorten a URL. Empty if none.",
     },
     red_flags: {
       type: "array",
@@ -175,6 +188,42 @@ export async function* runRefutation(
   let verdict: Verdict | null = null;
   let forcedFinal = false;
 
+  // Every source the desk actually touched, keyed by URL. Search results are
+  // recorded as seen (cited=false); fetched pages and cited passages are
+  // upgraded to cited=true. This is the ground truth the UI resolves the
+  // model-reported source_urls against.
+  const sources = new Map<string, SourceRef>();
+  const recordSource = (url: string, title: string | null, cited: boolean) => {
+    const existing = sources.get(url);
+    if (existing) {
+      if (title && !existing.title) existing.title = title;
+      if (cited) existing.cited = true;
+    } else {
+      sources.set(url, { url, title, cited });
+    }
+  };
+  const harvestSources = (content: Anthropic.Messages.ContentBlock[]) => {
+    for (const block of content) {
+      if (block.type === "web_search_tool_result") {
+        if (Array.isArray(block.content)) {
+          for (const result of block.content) {
+            recordSource(result.url, result.title, false);
+          }
+        }
+      } else if (block.type === "web_fetch_tool_result") {
+        if ("type" in block.content && block.content.type === "web_fetch_result") {
+          recordSource(block.content.url, block.content.content.title, true);
+        }
+      } else if (block.type === "text" && block.citations) {
+        for (const citation of block.citations) {
+          if (citation.type === "web_search_result_location") {
+            recordSource(citation.url, citation.title, true);
+          }
+        }
+      }
+    }
+  };
+
   for (let iteration = 0; iteration < MAX_LOOP_ITERATIONS && !verdict; iteration++) {
     const stream = client.messages.stream({
       model: MODEL,
@@ -227,6 +276,7 @@ export async function* runRefutation(
     }
 
     const message = await stream.finalMessage();
+    harvestSources(message.content);
     messages.push({ role: "assistant", content: message.content });
 
     if (message.stop_reason === "pause_turn") {
@@ -261,6 +311,13 @@ export async function* runRefutation(
     return;
   }
 
+  if (sources.size > 0) {
+    // Cited sources first so the UI's url->title map favors what was read.
+    yield {
+      t: "sources",
+      v: [...sources.values()].sort((a, b) => Number(b.cited) - Number(a.cited)),
+    };
+  }
   yield { t: "stage", v: "verdict" };
   yield { t: "verdict", v: verdict };
 }
