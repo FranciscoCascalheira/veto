@@ -16,7 +16,8 @@ Trading journals analyze your trades after the fact. Veto attacks them **before 
 2. **Verify** — every premise is checked against fresh web sources and classified: `CONFIRMED` / `PARTIAL` / `FALSE` / `UNVERIFIABLE`, with clickable links to the sources the desk actually used. "Confirmed from memory" doesn't exist at this desk.
 3. **Attack** — the adversarial sweep runs even when premises hold: strongest bear case, insider selling, dilution, short interest, valuation, and whether your catalyst is already priced in.
 4. **Verdict** — `BLESSED` or `REFUSED`. A false load-bearing premise is an automatic refusal. When in doubt, it refuses.
-5. **Argue back** — disagree? Bring a new fact and contest the verdict. The desk verifies your claim against fresh sources and defends or amends — on evidence, never on insistence. The conversation lives in your browser tab; nothing is stored server-side.
+5. **Argue back** — disagree? Bring a new fact and contest the verdict. The desk verifies your claim against fresh sources and defends or amends — on evidence, never on insistence. The conversation lives in your browser; nothing is stored server-side.
+6. **Local history** — finished reviews are saved in your browser (localStorage — no accounts, nothing server-side). Reopen a past review, contest it again, and track open invalidations: every verdict names the condition that should kill the trade, and re-checking it against fresh sources is one click.
 
 ## What it is not
 

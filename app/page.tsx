@@ -3,19 +3,54 @@
 import { useEffect, useRef, useState } from "react";
 import type {
   EngineEvent,
+  FinalVerdict,
   PremiseState,
   SourceRef,
   TradeCard,
   Verdict,
 } from "@/lib/types";
-
-type FeedItem =
-  | { kind: "text"; text: string }
-  | { kind: "search"; query: string }
-  | { kind: "fetch"; url: string }
-  | { kind: "challenge"; text: string };
+import {
+  closeInvalidation,
+  deleteReview,
+  loadHistory,
+  newReviewId,
+  upsertReview,
+  type FeedItem,
+  type StoredReview,
+} from "@/lib/history";
 
 type Status = "idle" | "structuring" | "verifying" | "done" | "error";
+
+// Every replay of the sample review lands on this one history entry, so it
+// never piles up duplicates. The re-check prefill matches the canned
+// argue-back round the demo answers with.
+const DEMO_HISTORY_ID = "demo-sample";
+const DEMO_RECHECK_CHALLENGE =
+  "The Army's FY2027 budget line funding this program was approved last week — the LOI is as good as signed.";
+
+// Mutable mirror of the review currently on screen. handleEvent runs inside
+// the streaming loop where React state reads would be stale, so the data a
+// finished round persists to history is accumulated here.
+type ActiveReview = {
+  id: string;
+  createdAt: number;
+  demo: boolean;
+  thesis: string;
+  card: TradeCard | null;
+  feed: FeedItem[];
+  sources: SourceRef[];
+  verdictHistory: FinalVerdict[];
+  verdict: Verdict | null;
+  transcript: unknown[] | null;
+};
+
+function appendFeed(prev: FeedItem[], item: FeedItem): FeedItem[] {
+  const last = prev[prev.length - 1];
+  if (item.kind === "text" && last?.kind === "text") {
+    return [...prev.slice(0, -1), { kind: "text", text: last.text + item.text }];
+  }
+  return [...prev, item];
+}
 
 const PLACEHOLDER = `Example: Buying CRWV around $87. CoreWeave signed a multi-billion dollar capacity deal with Meta, analyst targets sit well above $130, and AI compute demand keeps outrunning supply. Expecting +40% in 3-6 months. I'd get out below $78.`;
 
@@ -40,13 +75,17 @@ export default function Home() {
   const [isDemo, setIsDemo] = useState(false);
   const [challenge, setChallenge] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [history, setHistory] = useState<StoredReview[]>([]);
   const resultRef = useRef<HTMLDivElement>(null);
+  const argueRef = useRef<HTMLDivElement>(null);
+  const activeRef = useRef<ActiveReview | null>(null);
 
   useEffect(() => {
     const savedKey = localStorage.getItem("veto-api-key");
     if (savedKey) setApiKey(savedKey);
     const savedCode = localStorage.getItem("veto-access-code");
     if (savedCode) setCode(savedCode);
+    setHistory(loadHistory());
   }, []);
 
   function saveKey(value: string) {
@@ -62,6 +101,7 @@ export default function Home() {
   }
 
   function handleEvent(event: EngineEvent) {
+    const active = activeRef.current;
     switch (event.t) {
       case "stage":
         if (event.v === "structuring") setStatus("structuring");
@@ -69,38 +109,61 @@ export default function Home() {
         break;
       case "card":
         setCard(event.v);
+        if (active) active.card = event.v;
         break;
       case "text":
-        setFeed((prev) => {
-          const last = prev[prev.length - 1];
-          if (last && last.kind === "text") {
-            return [...prev.slice(0, -1), { kind: "text", text: last.text + event.v }];
-          }
-          return [...prev, { kind: "text", text: event.v }];
-        });
+        setFeed((prev) => appendFeed(prev, { kind: "text", text: event.v }));
+        if (active) active.feed = appendFeed(active.feed, { kind: "text", text: event.v });
         break;
       case "search":
-        setFeed((prev) => [...prev, { kind: "search", query: event.v }]);
+        setFeed((prev) => appendFeed(prev, { kind: "search", query: event.v }));
+        if (active) active.feed = appendFeed(active.feed, { kind: "search", query: event.v });
         break;
       case "fetch":
-        setFeed((prev) => [...prev, { kind: "fetch", url: event.v }]);
+        setFeed((prev) => appendFeed(prev, { kind: "fetch", url: event.v }));
+        if (active) active.feed = appendFeed(active.feed, { kind: "fetch", url: event.v });
         break;
       case "sources":
         setSources(event.v);
+        if (active) active.sources = event.v;
         break;
       case "verdict":
         setVerdict(event.v);
         setVerdictHistory((prev) => [...prev, event.v.verdict]);
         setStatus("done");
+        if (active) {
+          active.verdict = event.v;
+          active.verdictHistory = [...active.verdictHistory, event.v.verdict];
+        }
         break;
       case "transcript":
         setTranscript(event.v);
+        if (active) active.transcript = event.v;
         break;
       case "error":
         setError(event.v);
         setStatus("error");
         break;
       case "done":
+        // A round is history-worthy only once it produced a verdict.
+        if (active && active.card && active.verdict) {
+          setHistory(
+            upsertReview({
+              id: active.id,
+              createdAt: active.createdAt,
+              updatedAt: Date.now(),
+              demo: active.demo,
+              thesis: active.thesis,
+              card: active.card,
+              verdict: active.verdict,
+              verdictHistory: active.verdictHistory,
+              sources: active.sources,
+              feed: active.feed,
+              transcript: active.transcript,
+              invalidationClosed: false,
+            }),
+          );
+        }
         break;
     }
   }
@@ -140,6 +203,18 @@ export default function Home() {
 
   async function run(demo = false) {
     if (status === "structuring" || status === "verifying") return;
+    activeRef.current = {
+      id: demo ? DEMO_HISTORY_ID : newReviewId(),
+      createdAt: Date.now(),
+      demo,
+      thesis: demo ? "" : thesis,
+      card: null,
+      feed: [],
+      sources: [],
+      verdictHistory: [],
+      verdict: null,
+      transcript: null,
+    };
     setCard(null);
     setFeed([]);
     setSources([]);
@@ -166,7 +241,10 @@ export default function Home() {
     if (text.length < 10 || (!isDemo && !transcript)) return;
     setError(null);
     setStatus("verifying");
-    setFeed((prev) => [...prev, { kind: "challenge", text }]);
+    setFeed((prev) => appendFeed(prev, { kind: "challenge", text }));
+    if (activeRef.current) {
+      activeRef.current.feed = appendFeed(activeRef.current.feed, { kind: "challenge", text });
+    }
 
     try {
       await streamReview(
@@ -180,7 +258,66 @@ export default function Home() {
     }
   }
 
+  // Restore a stored review to the screen exactly as it finished, including
+  // the client-held transcript so it can be contested further.
+  function reopen(entry: StoredReview, scroll = true) {
+    if (status === "structuring" || status === "verifying") return;
+    activeRef.current = {
+      id: entry.id,
+      createdAt: entry.createdAt,
+      demo: entry.demo,
+      thesis: entry.thesis,
+      card: entry.card,
+      feed: entry.feed,
+      sources: entry.sources,
+      verdictHistory: [...entry.verdictHistory],
+      verdict: entry.verdict,
+      transcript: entry.transcript,
+    };
+    if (entry.thesis) setThesis(entry.thesis);
+    setCard(entry.card);
+    setFeed(entry.feed);
+    setSources(entry.sources);
+    setVerdict(entry.verdict);
+    setVerdictHistory(entry.verdictHistory);
+    setTranscript(entry.transcript);
+    setIsDemo(entry.demo);
+    setChallenge("");
+    setError(null);
+    setStatus("done");
+    if (scroll) resultRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function recheck(entry: StoredReview) {
+    if (status === "structuring" || status === "verifying") return;
+    const contestable = entry.demo || entry.transcript !== null;
+    reopen(entry, false);
+    if (contestable) {
+      setChallenge(
+        entry.demo
+          ? DEMO_RECHECK_CHALLENGE
+          : `Time check on the invalidation this review set: "${entry.verdict.suggested_invalidation}" — has it triggered since? Verify against fresh sources as of today and update the verdict.`,
+      );
+      setTimeout(() => {
+        argueRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 80);
+    } else {
+      // The stored conversation was shed for space; the original thesis is
+      // back in the box for a fresh full review.
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  }
+
+  function removeEntry(id: string) {
+    setHistory(deleteReview(id));
+  }
+
+  function markClosed(id: string) {
+    setHistory(closeInvalidation(id));
+  }
+
   const running = status === "structuring" || status === "verifying";
+  const openInvalidations = history.filter((entry) => !entry.invalidationClosed);
   const verdictFor = (id: string): PremiseState | null =>
     verdict?.premise_verdicts.find((p) => p.id === id)?.verdict ?? null;
   const evidenceFor = (id: string): string | null =>
@@ -384,7 +521,7 @@ export default function Home() {
                 </div>
                 {verdictHistory.length > 1 && (
                   <p className="mt-1 font-mono text-xs uppercase tracking-wider text-muted">
-                    challenged ×{verdictHistory.length - 1} ·{" "}
+                    contested ×{verdictHistory.length - 1} ·{" "}
                     {verdictHistory[verdictHistory.length - 1] ===
                     verdictHistory[verdictHistory.length - 2]
                       ? "verdict upheld"
@@ -430,7 +567,10 @@ export default function Home() {
             )}
 
             {verdict && (transcript || isDemo) && (
-              <div className="animate-enter rounded-lg border border-edge bg-surface p-4">
+              <div
+                ref={argueRef}
+                className="animate-enter rounded-lg border border-edge bg-surface p-4"
+              >
                 <h2 className="font-mono text-xs uppercase tracking-widest text-muted">
                   Argue back
                 </h2>
@@ -481,6 +621,95 @@ export default function Home() {
           </section>
         )}
       </div>
+
+      {!running && openInvalidations.length > 0 && (
+        <section className="animate-enter mt-10 rounded-lg border border-edge bg-surface p-4">
+          <h2 className="font-mono text-xs uppercase tracking-widest text-muted">
+            Open invalidations
+          </h2>
+          <p className="mt-1.5 text-xs text-muted">
+            Every verdict names the condition that should kill the trade. These
+            are still open — re-check one when time has passed or news lands.
+          </p>
+          <ul className="mt-2 divide-y divide-edge">
+            {openInvalidations.map((entry) => (
+              <li key={entry.id} className="py-3 last:pb-0">
+                <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                  <span className="font-mono text-sm font-semibold text-foreground">
+                    {entry.card.ticker}
+                  </span>
+                  <VerdictTag verdict={entry.verdict.verdict} />
+                  {entry.demo && <SampleTag />}
+                  <span className="font-mono text-[11px] text-muted">
+                    {dateOf(entry.updatedAt)}
+                  </span>
+                  <span className="flex-1" />
+                  <button
+                    onClick={() => recheck(entry)}
+                    className="font-mono text-[11px] uppercase tracking-wider text-accent transition-colors duration-150 hover:text-foreground"
+                  >
+                    Re-check
+                  </button>
+                  <button
+                    onClick={() => markClosed(entry.id)}
+                    className="font-mono text-[11px] uppercase tracking-wider text-muted transition-colors duration-150 hover:text-foreground"
+                  >
+                    Mark closed
+                  </button>
+                </div>
+                <p className="mt-1.5 font-mono text-xs leading-relaxed text-foreground/85">
+                  {entry.verdict.suggested_invalidation}
+                </p>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {!running && history.length > 0 && (
+        <section className="animate-enter mt-6 rounded-lg border border-edge bg-surface p-4">
+          <h2 className="font-mono text-xs uppercase tracking-widest text-muted">
+            Past reviews
+          </h2>
+          <ul className="mt-2 divide-y divide-edge">
+            {history.map((entry) => (
+              <li key={entry.id} className="flex items-center gap-3 py-2.5 last:pb-0">
+                <button
+                  onClick={() => reopen(entry)}
+                  className="group flex min-w-0 flex-1 flex-wrap items-baseline gap-x-3 gap-y-0.5 text-left"
+                >
+                  <span className="font-mono text-[11px] text-muted">
+                    {dateOf(entry.updatedAt)}
+                  </span>
+                  <span className="font-mono text-sm font-semibold text-foreground">
+                    {entry.card.ticker}
+                  </span>
+                  <VerdictTag verdict={entry.verdict.verdict} />
+                  {entry.verdictHistory.length > 1 && (
+                    <span className="font-mono text-[11px] uppercase tracking-wider text-muted">
+                      contested ×{entry.verdictHistory.length - 1}
+                    </span>
+                  )}
+                  {entry.demo && <SampleTag />}
+                  <span className="min-w-40 flex-1 truncate text-xs text-muted transition-colors duration-150 group-hover:text-foreground/85">
+                    {entry.thesis || entry.card.thesis_summary}
+                  </span>
+                </button>
+                <button
+                  onClick={() => removeEntry(entry.id)}
+                  aria-label={`Delete the ${entry.card.ticker} review`}
+                  className="-m-2 shrink-0 p-2 font-mono text-sm leading-none text-muted transition-colors duration-150 hover:text-refused"
+                >
+                  ×
+                </button>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-3 text-xs text-muted">
+            Reviews are saved in this browser only — nothing leaves your machine.
+          </p>
+        </section>
+      )}
 
       <footer className="mt-16 border-t border-edge pt-5 text-sm leading-relaxed text-muted">
         <p>
@@ -535,6 +764,34 @@ function SourceLinks({
         );
       })}
     </p>
+  );
+}
+
+function dateOf(ts: number): string {
+  const d = new Date(ts);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function VerdictTag({ verdict }: { verdict: FinalVerdict }) {
+  return (
+    <span
+      className={`shrink-0 rounded border px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider ${
+        verdict === "REFUSED"
+          ? "border-refused/50 text-refused"
+          : "border-blessed/40 text-blessed"
+      }`}
+    >
+      {verdict}
+    </span>
+  );
+}
+
+function SampleTag() {
+  return (
+    <span className="shrink-0 rounded border border-edge px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider text-muted">
+      sample
+    </span>
   );
 }
 
