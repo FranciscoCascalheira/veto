@@ -27,6 +27,7 @@ const PREMISE_BADGE: Record<PremiseState, string> = {
 export default function Home() {
   const [thesis, setThesis] = useState("");
   const [apiKey, setApiKey] = useState("");
+  const [code, setCode] = useState("");
   const [status, setStatus] = useState<Status>("idle");
   const [card, setCard] = useState<TradeCard | null>(null);
   const [feed, setFeed] = useState<FeedItem[]>([]);
@@ -35,14 +36,22 @@ export default function Home() {
   const resultRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const saved = localStorage.getItem("veto-api-key");
-    if (saved) setApiKey(saved);
+    const savedKey = localStorage.getItem("veto-api-key");
+    if (savedKey) setApiKey(savedKey);
+    const savedCode = localStorage.getItem("veto-access-code");
+    if (savedCode) setCode(savedCode);
   }, []);
 
   function saveKey(value: string) {
     setApiKey(value);
     if (value) localStorage.setItem("veto-api-key", value);
     else localStorage.removeItem("veto-api-key");
+  }
+
+  function saveCode(value: string) {
+    setCode(value);
+    if (value) localStorage.setItem("veto-access-code", value);
+    else localStorage.removeItem("veto-access-code");
   }
 
   function handleEvent(event: EngineEvent) {
@@ -98,7 +107,7 @@ export default function Home() {
           "Content-Type": "application/json",
           ...(apiKey && !demo ? { "x-anthropic-api-key": apiKey } : {}),
         },
-        body: JSON.stringify(demo ? { demo: true } : { thesis }),
+        body: JSON.stringify(demo ? { demo: true } : { thesis, code }),
       });
 
       if (!res.ok) {
@@ -163,6 +172,13 @@ export default function Home() {
             placeholder="sk-ant-… (your Anthropic API key)"
             className="flex-1 rounded-md border border-edge bg-surface-2 px-3 py-2 font-mono text-xs text-foreground placeholder:text-muted focus:border-accent/60 focus:outline-none"
           />
+          <input
+            type="text"
+            value={code}
+            onChange={(e) => saveCode(e.target.value)}
+            placeholder="access code"
+            className="rounded-md border border-edge bg-surface-2 px-3 py-2 font-mono text-xs text-foreground placeholder:text-muted focus:border-accent/60 focus:outline-none sm:w-36"
+          />
           <button
             onClick={() => run()}
             disabled={running || thesis.trim().length < 20}
@@ -172,9 +188,9 @@ export default function Home() {
           </button>
         </div>
         <p className="mt-2 text-xs text-muted">
-          Bring your own key: it is sent with this request only and never stored
-          server-side. Leave it empty to use the site&apos;s free daily runs, when
-          enabled. No key?{" "}
+          Bring your own key (sent with this request only, never stored
+          server-side) — or run keyless with an access code, while the day&apos;s
+          free-run budget lasts. No key?{" "}
           <button
             onClick={() => run(true)}
             disabled={running}

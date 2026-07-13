@@ -7,13 +7,21 @@ export const runtime = "nodejs";
 export const maxDuration = 300;
 
 const FREE_RUNS_PER_DAY = Number(process.env.FREE_RUNS_PER_DAY ?? 3);
+const FREE_RUNS_GLOBAL_PER_DAY = Number(process.env.FREE_RUNS_GLOBAL_PER_DAY ?? 25);
 
-// Per-IP daily counter for the optional server-key free tier. In-memory on
-// purpose for v1: resets on redeploy and is per-instance on serverless.
+// Per-IP and global daily counters for the optional server-key free tier.
+// In-memory on purpose for v1: resets on redeploy. The public URL is
+// scannable, so keyless runs are bounded twice (per IP and globally) and,
+// when FRIENDS_CODE is set, gated behind a shared access code.
 const usage = new Map<string, { day: string; count: number }>();
+let globalUsage = { day: "", count: 0 };
+
+function today(): string {
+  return new Date().toISOString().slice(0, 10);
+}
 
 function consumeFreeRun(ip: string): boolean {
-  const day = new Date().toISOString().slice(0, 10);
+  const day = today();
   const entry = usage.get(ip);
   if (!entry || entry.day !== day) {
     usage.set(ip, { day, count: 1 });
@@ -21,6 +29,14 @@ function consumeFreeRun(ip: string): boolean {
   }
   if (entry.count >= FREE_RUNS_PER_DAY) return false;
   entry.count += 1;
+  return true;
+}
+
+function consumeGlobalRun(): boolean {
+  const day = today();
+  if (globalUsage.day !== day) globalUsage = { day, count: 0 };
+  if (globalUsage.count >= FREE_RUNS_GLOBAL_PER_DAY) return false;
+  globalUsage.count += 1;
   return true;
 }
 
@@ -82,6 +98,7 @@ export async function POST(req: NextRequest) {
   const body = (await req.json().catch(() => ({}))) as {
     thesis?: unknown;
     demo?: unknown;
+    code?: unknown;
   };
   if (body.demo === true) return demoResponse();
   const thesis = typeof body.thesis === "string" ? body.thesis.trim() : "";
@@ -106,6 +123,28 @@ export async function POST(req: NextRequest) {
       return Response.json(
         { error: "No API key. Paste your Anthropic API key to run Veto." },
         { status: 401 },
+      );
+    }
+    const friendsCode = process.env.FRIENDS_CODE?.trim();
+    if (friendsCode) {
+      const given = typeof body.code === "string" ? body.code.trim() : "";
+      if (given !== friendsCode) {
+        return Response.json(
+          {
+            error:
+              "Free runs on this site need an access code. Enter it below, or use your own Anthropic API key.",
+          },
+          { status: 401 },
+        );
+      }
+    }
+    if (!consumeGlobalRun()) {
+      return Response.json(
+        {
+          error:
+            "The site's free-run budget for today is spent. Bring your own Anthropic API key to continue.",
+        },
+        { status: 429 },
       );
     }
     const ip = (req.headers.get("x-forwarded-for") ?? "local").split(",")[0].trim();
