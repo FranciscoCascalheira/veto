@@ -1,7 +1,8 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { NextRequest } from "next/server";
-import { runRefutation } from "@/lib/engine";
-import { DEMO_DELAYS, DEMO_EVENTS } from "@/lib/demo";
+import { asTranscript, runArgueBack, runRefutation } from "@/lib/engine";
+import { DEMO_ARGUE_EVENTS, DEMO_DELAYS, DEMO_EVENTS } from "@/lib/demo";
+import type { EngineEvent } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -59,7 +60,7 @@ function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : "Unexpected error.";
 }
 
-function demoResponse(): Response {
+function demoResponse(events: EngineEvent[]): Response {
   const encoder = new TextEncoder();
   const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
   const stream = new ReadableStream({
@@ -73,7 +74,7 @@ function demoResponse(): Response {
           return false;
         }
       };
-      for (const event of DEMO_EVENTS) {
+      for (const event of events) {
         await sleep(DEMO_DELAYS[event.t]);
         if (!send(event)) return;
       }
@@ -95,24 +96,61 @@ function demoResponse(): Response {
 }
 
 export async function POST(req: NextRequest) {
+  // Transcripts round-trip the full conversation (search results included),
+  // so bodies can be large — but not unbounded.
+  const contentLength = Number(req.headers.get("content-length") ?? 0);
+  if (contentLength > 5_000_000) {
+    return Response.json({ error: "Request too large." }, { status: 413 });
+  }
   const body = (await req.json().catch(() => ({}))) as {
     thesis?: unknown;
     demo?: unknown;
     code?: unknown;
+    challenge?: unknown;
+    transcript?: unknown;
   };
-  if (body.demo === true) return demoResponse();
-  const thesis = typeof body.thesis === "string" ? body.thesis.trim() : "";
-  if (thesis.length < 20) {
-    return Response.json(
-      { error: "Write a real thesis — at least a couple of sentences." },
-      { status: 400 },
-    );
+  const challenge = typeof body.challenge === "string" ? body.challenge.trim() : "";
+  const isArgue = challenge.length > 0;
+
+  if (body.demo === true) {
+    return demoResponse(isArgue ? DEMO_ARGUE_EVENTS : DEMO_EVENTS);
   }
-  if (thesis.length > 8000) {
-    return Response.json(
-      { error: "Thesis too long — keep it under 8000 characters." },
-      { status: 400 },
-    );
+
+  const thesis = typeof body.thesis === "string" ? body.thesis.trim() : "";
+  let transcript: Anthropic.Messages.MessageParam[] | null = null;
+  if (isArgue) {
+    if (challenge.length < 10) {
+      return Response.json(
+        { error: "Bring a real challenge — a fact the desk can check." },
+        { status: 400 },
+      );
+    }
+    if (challenge.length > 3000) {
+      return Response.json(
+        { error: "Challenge too long — keep it under 3000 characters." },
+        { status: 400 },
+      );
+    }
+    transcript = asTranscript(body.transcript);
+    if (!transcript) {
+      return Response.json(
+        { error: "This review can no longer be contested. Run it again." },
+        { status: 400 },
+      );
+    }
+  } else {
+    if (thesis.length < 20) {
+      return Response.json(
+        { error: "Write a real thesis — at least a couple of sentences." },
+        { status: 400 },
+      );
+    }
+    if (thesis.length > 8000) {
+      return Response.json(
+        { error: "Thesis too long — keep it under 8000 characters." },
+        { status: 400 },
+      );
+    }
   }
 
   const byok = req.headers.get("x-anthropic-api-key")?.trim();
@@ -171,7 +209,10 @@ export async function POST(req: NextRequest) {
         }
       };
       try {
-        for await (const event of runRefutation(client, thesis)) {
+        const run = transcript
+          ? runArgueBack(client, transcript, challenge)
+          : runRefutation(client, thesis);
+        for await (const event of run) {
           send(event);
         }
         send({ t: "done" });

@@ -53,5 +53,8 @@ export type EngineEvent =
   | { t: "fetch"; v: string }
   | { t: "sources"; v: SourceRef[] }
   | { t: "verdict"; v: Verdict }
+  // Opaque conversation history, held client-side (no server storage) and
+  // returned verbatim with an argue-back challenge to continue the review.
+  | { t: "transcript"; v: unknown[] }
   | { t: "error"; v: string }
   | { t: "done" };

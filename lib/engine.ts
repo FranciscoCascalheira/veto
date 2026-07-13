@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { EngineEvent, SourceRef, TradeCard, Verdict } from "./types";
-import { STRUCTURE_SYSTEM, VERIFY_SYSTEM, verifyBrief } from "./prompts";
+import { STRUCTURE_SYSTEM, VERIFY_SYSTEM, argueBrief, verifyBrief } from "./prompts";
 
 const MODEL = "claude-opus-4-8";
 const MAX_LOOP_ITERATIONS = 8;
@@ -170,59 +170,96 @@ async function structureCard(client: Anthropic, thesis: string): Promise<TradeCa
   return JSON.parse(textBlock.text) as TradeCard;
 }
 
-export async function* runRefutation(
-  client: Anthropic,
-  thesis: string,
-): AsyncGenerator<EngineEvent> {
-  yield { t: "stage", v: "structuring" };
-  const card = await structureCard(client, thesis);
-  yield { t: "card", v: card };
+// Every source the desk actually touched, keyed by URL. Search results are
+// recorded as seen (cited=false); fetched pages and cited passages are
+// upgraded to cited=true. This is the ground truth the UI resolves the
+// model-reported source_urls against.
+function recordSource(
+  sources: Map<string, SourceRef>,
+  url: string,
+  title: string | null,
+  cited: boolean,
+) {
+  const existing = sources.get(url);
+  if (existing) {
+    if (title && !existing.title) existing.title = title;
+    if (cited) existing.cited = true;
+  } else {
+    sources.set(url, { url, title, cited });
+  }
+}
 
-  yield { t: "stage", v: "verifying" };
-
-  const tools = buildTools();
-  const messages: Anthropic.Messages.MessageParam[] = [
-    { role: "user", content: verifyBrief(card, thesis) },
-  ];
-
-  let verdict: Verdict | null = null;
-  let forcedFinal = false;
-
-  // Every source the desk actually touched, keyed by URL. Search results are
-  // recorded as seen (cited=false); fetched pages and cited passages are
-  // upgraded to cited=true. This is the ground truth the UI resolves the
-  // model-reported source_urls against.
-  const sources = new Map<string, SourceRef>();
-  const recordSource = (url: string, title: string | null, cited: boolean) => {
-    const existing = sources.get(url);
-    if (existing) {
-      if (title && !existing.title) existing.title = title;
-      if (cited) existing.cited = true;
-    } else {
-      sources.set(url, { url, title, cited });
-    }
-  };
-  const harvestSources = (content: Anthropic.Messages.ContentBlock[]) => {
-    for (const block of content) {
-      if (block.type === "web_search_tool_result") {
-        if (Array.isArray(block.content)) {
-          for (const result of block.content) {
-            recordSource(result.url, result.title, false);
-          }
+// Runs on live ContentBlock[] and on client-round-tripped transcript blocks
+// alike, so every check is structural rather than typed.
+function harvestSources(sources: Map<string, SourceRef>, content: unknown) {
+  if (!Array.isArray(content)) return;
+  for (const raw of content) {
+    if (typeof raw !== "object" || raw === null) continue;
+    const block = raw as { type?: unknown; content?: unknown; citations?: unknown };
+    if (block.type === "web_search_tool_result" && Array.isArray(block.content)) {
+      for (const result of block.content as Array<{ url?: unknown; title?: unknown }>) {
+        if (typeof result.url === "string") {
+          recordSource(
+            sources,
+            result.url,
+            typeof result.title === "string" ? result.title : null,
+            false,
+          );
         }
-      } else if (block.type === "web_fetch_tool_result") {
-        if ("type" in block.content && block.content.type === "web_fetch_result") {
-          recordSource(block.content.url, block.content.content.title, true);
-        }
-      } else if (block.type === "text" && block.citations) {
-        for (const citation of block.citations) {
-          if (citation.type === "web_search_result_location") {
-            recordSource(citation.url, citation.title, true);
-          }
+      }
+    } else if (
+      block.type === "web_fetch_tool_result" &&
+      typeof block.content === "object" &&
+      block.content !== null
+    ) {
+      const fetched = block.content as {
+        type?: unknown;
+        url?: unknown;
+        content?: { title?: unknown } | null;
+      };
+      if (fetched.type === "web_fetch_result" && typeof fetched.url === "string") {
+        const title =
+          fetched.content &&
+          typeof fetched.content === "object" &&
+          typeof fetched.content.title === "string"
+            ? fetched.content.title
+            : null;
+        recordSource(sources, fetched.url, title, true);
+      }
+    } else if (block.type === "text" && Array.isArray(block.citations)) {
+      for (const citation of block.citations as Array<{
+        type?: unknown;
+        url?: unknown;
+        title?: unknown;
+      }>) {
+        if (
+          citation.type === "web_search_result_location" &&
+          typeof citation.url === "string"
+        ) {
+          recordSource(
+            sources,
+            citation.url,
+            typeof citation.title === "string" ? citation.title : null,
+            true,
+          );
         }
       }
     }
-  };
+  }
+}
+
+// The verify/attack loop. Appends to `messages` in place — including the
+// closing tool_result for submit_verdict, so the finished transcript can be
+// continued with a follow-up user turn (argue-back) without a dangling
+// tool call. Returns the verdict via the generator's return value.
+async function* runVerifyLoop(
+  client: Anthropic,
+  messages: Anthropic.Messages.MessageParam[],
+  sources: Map<string, SourceRef>,
+): AsyncGenerator<EngineEvent, Verdict | null> {
+  const tools = buildTools();
+  let verdict: Verdict | null = null;
+  let forcedFinal = false;
 
   for (let iteration = 0; iteration < MAX_LOOP_ITERATIONS && !verdict; iteration++) {
     const stream = client.messages.stream({
@@ -276,7 +313,7 @@ export async function* runRefutation(
     }
 
     const message = await stream.finalMessage();
-    harvestSources(message.content);
+    harvestSources(sources, message.content);
     messages.push({ role: "assistant", content: message.content });
 
     if (message.stop_reason === "pause_turn") {
@@ -290,6 +327,16 @@ export async function* runRefutation(
       );
       if (verdictBlock && verdictBlock.type === "tool_use") {
         verdict = verdictBlock.input as Verdict;
+        messages.push({
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: verdictBlock.id,
+              content: "Verdict recorded and delivered to the trader.",
+            },
+          ],
+        });
         break;
       }
     }
@@ -306,11 +353,14 @@ export async function* runRefutation(
     }
   }
 
-  if (!verdict) {
-    yield { t: "error", v: "The reviewer finished without submitting a verdict. Run it again." };
-    return;
-  }
+  return verdict;
+}
 
+async function* emitOutcome(
+  verdict: Verdict,
+  sources: Map<string, SourceRef>,
+  messages: Anthropic.Messages.MessageParam[],
+): AsyncGenerator<EngineEvent> {
   if (sources.size > 0) {
     // Cited sources first so the UI's url->title map favors what was read.
     yield {
@@ -320,4 +370,75 @@ export async function* runRefutation(
   }
   yield { t: "stage", v: "verdict" };
   yield { t: "verdict", v: verdict };
+  // The conversation so far, held by the client (no server-side storage) and
+  // sent back verbatim to continue the review with an argue-back turn.
+  yield { t: "transcript", v: messages };
+}
+
+export async function* runRefutation(
+  client: Anthropic,
+  thesis: string,
+): AsyncGenerator<EngineEvent> {
+  yield { t: "stage", v: "structuring" };
+  const card = await structureCard(client, thesis);
+  yield { t: "card", v: card };
+
+  yield { t: "stage", v: "verifying" };
+
+  const messages: Anthropic.Messages.MessageParam[] = [
+    { role: "user", content: verifyBrief(card, thesis) },
+  ];
+  const sources = new Map<string, SourceRef>();
+  const verdict = yield* runVerifyLoop(client, messages, sources);
+
+  if (!verdict) {
+    yield { t: "error", v: "The reviewer finished without submitting a verdict. Run it again." };
+    return;
+  }
+  yield* emitOutcome(verdict, sources, messages);
+}
+
+// Shallow structural check on a client-held transcript before it goes back to
+// the API. Deeper garbage is rejected by the API itself and surfaced as an
+// error event; this only blocks obviously malformed or oversized payloads.
+export function asTranscript(value: unknown): Anthropic.Messages.MessageParam[] | null {
+  if (!Array.isArray(value) || value.length === 0 || value.length > 80) return null;
+  for (const entry of value) {
+    if (typeof entry !== "object" || entry === null) return null;
+    const { role, content } = entry as { role?: unknown; content?: unknown };
+    if (role !== "user" && role !== "assistant") return null;
+    if (typeof content !== "string" && !Array.isArray(content)) return null;
+  }
+  if ((value[0] as { role: string }).role !== "user") return null;
+  return value as Anthropic.Messages.MessageParam[];
+}
+
+export async function* runArgueBack(
+  client: Anthropic,
+  transcript: Anthropic.Messages.MessageParam[],
+  challenge: string,
+): AsyncGenerator<EngineEvent> {
+  yield { t: "stage", v: "verifying" };
+
+  // Re-harvest the whole prior conversation so sources from earlier rounds
+  // still resolve to titles in the updated verdict.
+  const sources = new Map<string, SourceRef>();
+  for (const message of transcript) {
+    if (message.role === "assistant") harvestSources(sources, message.content);
+  }
+
+  const messages: Anthropic.Messages.MessageParam[] = [
+    ...transcript,
+    { role: "user", content: argueBrief(challenge) },
+  ];
+  const verdict = yield* runVerifyLoop(client, messages, sources);
+
+  if (!verdict) {
+    yield {
+      t: "error",
+      v: "The reviewer finished without submitting an updated verdict. Contest it again.",
+    };
+    return;
+  }
+  yield* emitOutcome(verdict, sources, messages);
 }

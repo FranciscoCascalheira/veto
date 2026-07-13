@@ -141,6 +141,113 @@ export const DEMO_EVENTS: EngineEvent[] = [
   },
 ];
 
+// Canned argue-back round for the sample review: the trader pushes back with
+// a real-sounding new fact (an approved budget line), the desk verifies it,
+// grants what it proves — and stands, because a budget line is not a signed
+// contract. Demonstrates "amends on evidence, never folds to pressure".
+export const DEMO_ARGUE_EVENTS: EngineEvent[] = [
+  { t: "stage", v: "verifying" },
+  {
+    t: "text",
+    v: "Challenge received. The claim worth checking: an approved budget line for the program.\n",
+  },
+  { t: "search", v: "US Army FY2027 budget line Halcyon robotics program approved" },
+  {
+    t: "text",
+    v: "The FY2027 budget line is real and was approved. But a budget line funds a program — it does not sign a contract. Re-checking procurement.\n",
+  },
+  { t: "fetch", v: "https://procurement.records.example/search?vendor=halcyon" },
+  {
+    t: "text",
+    v: "Still no definitized award. The challenge adds context, not a contract. P1 stays FALSE.\n",
+  },
+  {
+    t: "sources",
+    v: [
+      {
+        url: "https://budget.defense.example/fy2027/robotics-line-0402A",
+        title: "FY2027 budget justification — ground robotics programs",
+        cited: true,
+      },
+      {
+        url: "https://procurement.records.example/search?vendor=halcyon",
+        title: "Federal procurement records — vendor search",
+        cited: true,
+      },
+      {
+        url: "https://ir.halcyon-robotics.example/press/2026-06-12",
+        title: "Halcyon Robotics announces letter of intent with US Army",
+        cited: true,
+      },
+      {
+        url: "https://marketdata.example/HLCN/estimates",
+        title: "HLCN consensus estimates",
+        cited: true,
+      },
+      {
+        url: "https://exchange.example/HLCN/short-interest",
+        title: "HLCN short interest report",
+        cited: true,
+      },
+      {
+        url: "https://filings.example/halcyon/insider-transactions",
+        title: "Halcyon Robotics insider transactions",
+        cited: true,
+      },
+    ],
+  },
+  { t: "stage", v: "verdict" },
+  {
+    t: "verdict",
+    v: {
+      premise_verdicts: [
+        {
+          id: "P1",
+          verdict: "FALSE",
+          evidence:
+            "Challenge checked: the FY2027 budget line is approved and funds the program — but funding an account is not signing a contract. Procurement records still show no definitized award; the June release remains a letter of intent.",
+          source_urls: [
+            "https://budget.defense.example/fy2027/robotics-line-0402A",
+            "https://procurement.records.example/search?vendor=halcyon",
+          ],
+        },
+        {
+          id: "P2",
+          verdict: "PARTIAL",
+          evidence:
+            "Unchanged by the challenge: consensus forward multiple is ~12x, not below 10x.",
+          source_urls: ["https://marketdata.example/HLCN/estimates"],
+        },
+        {
+          id: "P3",
+          verdict: "CONFIRMED",
+          evidence: "Unchanged by the challenge: short interest ~31% of float.",
+          source_urls: ["https://exchange.example/HLCN/short-interest"],
+        },
+      ],
+      bear_case:
+        "An approved budget line makes the award possible, not done — programs get funded and still go to a competitor, shrink, or slip. Until a definitized contract exists, the re-rating case rests on hope, and the squeeze fuel cuts both ways on the way down.",
+      bear_case_source_urls: [
+        "https://budget.defense.example/fy2027/robotics-line-0402A",
+        "https://filings.example/halcyon/insider-transactions",
+      ],
+      red_flags: [
+        "CFO sold shares two weeks after the LOI announcement.",
+        "The +18% move on announcement day suggests the claimed catalyst is already partly priced in.",
+      ],
+      verdict: "REFUSED",
+      verdict_reason:
+        "Challenge reviewed and partly confirmed: the budget line is real. It does not change desk rule 1 — P1 claims a signed contract and there is none. Necessary is not sufficient; the refusal stands on evidence, not stubbornness.",
+      what_would_need_to_be_true: [
+        "A definitive signed contract in a primary source (procurement record or 8-K), not a press-release LOI — the approved budget line makes this checkable soon.",
+        "A forward multiple actually below the peer group after the estimate revision cycle.",
+      ],
+      suggested_invalidation:
+        "If no definitized contract is announced by the end of Q3 2026, the thesis is dead regardless of price.",
+    },
+  },
+];
+
 export const DEMO_DELAYS: Record<EngineEvent["t"], number> = {
   stage: 500,
   card: 700,
@@ -149,6 +256,7 @@ export const DEMO_DELAYS: Record<EngineEvent["t"], number> = {
   fetch: 650,
   sources: 300,
   verdict: 400,
+  transcript: 0,
   error: 0,
   done: 0,
 };

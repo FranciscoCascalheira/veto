@@ -12,7 +12,8 @@ import type {
 type FeedItem =
   | { kind: "text"; text: string }
   | { kind: "search"; query: string }
-  | { kind: "fetch"; url: string };
+  | { kind: "fetch"; url: string }
+  | { kind: "challenge"; text: string };
 
 type Status = "idle" | "structuring" | "verifying" | "done" | "error";
 
@@ -34,6 +35,10 @@ export default function Home() {
   const [feed, setFeed] = useState<FeedItem[]>([]);
   const [sources, setSources] = useState<SourceRef[]>([]);
   const [verdict, setVerdict] = useState<Verdict | null>(null);
+  const [verdictHistory, setVerdictHistory] = useState<Verdict["verdict"][]>([]);
+  const [transcript, setTranscript] = useState<unknown[] | null>(null);
+  const [isDemo, setIsDemo] = useState(false);
+  const [challenge, setChallenge] = useState("");
   const [error, setError] = useState<string | null>(null);
   const resultRef = useRef<HTMLDivElement>(null);
 
@@ -85,7 +90,11 @@ export default function Home() {
         break;
       case "verdict":
         setVerdict(event.v);
+        setVerdictHistory((prev) => [...prev, event.v.verdict]);
         setStatus("done");
+        break;
+      case "transcript":
+        setTranscript(event.v);
         break;
       case "error":
         setError(event.v);
@@ -96,47 +105,75 @@ export default function Home() {
     }
   }
 
+  async function streamReview(payload: Record<string, unknown>, withKey: boolean) {
+    const res = await fetch("/api/refute", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(withKey && apiKey ? { "x-anthropic-api-key": apiKey } : {}),
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+      const data = (await res.json().catch(() => null)) as { error?: string } | null;
+      throw new Error(data?.error ?? `Request failed (${res.status}).`);
+    }
+    if (!res.body) throw new Error("No response stream.");
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const parts = buffer.split("\n\n");
+      buffer = parts.pop() ?? "";
+      for (const part of parts) {
+        const line = part.trim();
+        if (!line.startsWith("data: ")) continue;
+        handleEvent(JSON.parse(line.slice(6)) as EngineEvent);
+      }
+    }
+  }
+
   async function run(demo = false) {
     if (status === "structuring" || status === "verifying") return;
     setCard(null);
     setFeed([]);
     setSources([]);
     setVerdict(null);
+    setVerdictHistory([]);
+    setTranscript(null);
+    setIsDemo(demo);
+    setChallenge("");
     setError(null);
     setStatus("structuring");
     resultRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
 
     try {
-      const res = await fetch("/api/refute", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(apiKey && !demo ? { "x-anthropic-api-key": apiKey } : {}),
-        },
-        body: JSON.stringify(demo ? { demo: true } : { thesis, code }),
-      });
+      await streamReview(demo ? { demo: true } : { thesis, code }, !demo);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unexpected error.");
+      setStatus("error");
+    }
+  }
 
-      if (!res.ok) {
-        const data = (await res.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(data?.error ?? `Request failed (${res.status}).`);
-      }
-      if (!res.body) throw new Error("No response stream.");
+  async function argue() {
+    const text = challenge.trim();
+    if (status === "structuring" || status === "verifying") return;
+    if (text.length < 10 || (!isDemo && !transcript)) return;
+    setError(null);
+    setStatus("verifying");
+    setFeed((prev) => [...prev, { kind: "challenge", text }]);
 
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const parts = buffer.split("\n\n");
-        buffer = parts.pop() ?? "";
-        for (const part of parts) {
-          const line = part.trim();
-          if (!line.startsWith("data: ")) continue;
-          handleEvent(JSON.parse(line.slice(6)) as EngineEvent);
-        }
-      }
+    try {
+      await streamReview(
+        isDemo ? { demo: true, challenge: text } : { challenge: text, transcript, code },
+        !isDemo,
+      );
+      setChallenge("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unexpected error.");
       setStatus("error");
@@ -168,6 +205,7 @@ export default function Home() {
 
       <section className="rounded-lg border border-edge bg-surface p-4">
         <textarea
+          name="thesis"
           value={thesis}
           onChange={(e) => setThesis(e.target.value)}
           placeholder={PLACEHOLDER}
@@ -303,6 +341,16 @@ export default function Home() {
                       <p key={i} className="whitespace-pre-wrap text-foreground/85">
                         {item.text}
                       </p>
+                    ) : item.kind === "challenge" ? (
+                      <p
+                        key={i}
+                        className="border-l-2 border-accent/50 pl-3 text-foreground/85"
+                      >
+                        <span className="mr-2 font-mono text-xs uppercase tracking-wider text-accent">
+                          challenge
+                        </span>
+                        {item.text}
+                      </p>
                     ) : (
                       <p key={i} className="font-mono text-xs text-muted">
                         <span className="text-accent">
@@ -334,6 +382,15 @@ export default function Home() {
                 >
                   {verdict.verdict}
                 </div>
+                {verdictHistory.length > 1 && (
+                  <p className="mt-1 font-mono text-xs uppercase tracking-wider text-muted">
+                    challenged ×{verdictHistory.length - 1} ·{" "}
+                    {verdictHistory[verdictHistory.length - 1] ===
+                    verdictHistory[verdictHistory.length - 2]
+                      ? "verdict upheld"
+                      : "verdict overturned"}
+                  </p>
+                )}
                 <p className="mt-3 text-sm leading-relaxed text-foreground/90">
                   {verdict.verdict_reason}
                 </p>
@@ -369,6 +426,40 @@ export default function Home() {
                 <VerdictSection title="Suggested invalidation">
                   <p className="font-mono text-xs">{verdict.suggested_invalidation}</p>
                 </VerdictSection>
+              </div>
+            )}
+
+            {verdict && (transcript || isDemo) && (
+              <div className="animate-enter rounded-lg border border-edge bg-surface p-4">
+                <h2 className="font-mono text-xs uppercase tracking-widest text-muted">
+                  Argue back
+                </h2>
+                <p className="mt-1.5 text-xs text-muted">
+                  Disagree? Bring a new fact — a filing, a date, a number. The desk
+                  re-checks and amends on evidence, not insistence. Each round is a
+                  fresh review.
+                </p>
+                <textarea
+                  name="challenge"
+                  value={challenge}
+                  onChange={(e) => setChallenge(e.target.value)}
+                  placeholder={
+                    isDemo
+                      ? "Example: The Army's FY2027 budget line funding this program was approved last week — the LOI is as good as signed."
+                      : "The contract was definitized after your sources — see the 8-K filed this morning."
+                  }
+                  rows={3}
+                  className="mt-3 w-full resize-y rounded-md border border-edge bg-surface-2 p-3 text-sm leading-relaxed text-foreground placeholder:text-muted focus:border-accent/60 focus:outline-none"
+                />
+                <div className="mt-2 flex justify-end">
+                  <button
+                    onClick={() => argue()}
+                    disabled={running || challenge.trim().length < 10}
+                    className="rounded-md bg-accent px-5 py-2 text-sm font-medium text-background transition-colors duration-150 hover:bg-accent/90 disabled:opacity-40"
+                  >
+                    {running ? "Re-reviewing…" : "Contest the verdict"}
+                  </button>
+                </div>
               </div>
             )}
 
