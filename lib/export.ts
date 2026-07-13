@@ -1,4 +1,4 @@
-import type { FinalVerdict, SourceRef, TradeCard, Verdict } from "./types";
+import type { FinalVerdict, SourceRef, StressOutcome, TradeCard, Verdict } from "./types";
 import type { FeedItem } from "./history";
 
 // Everything a shareable artifact needs, decoupled from live/stored state so
@@ -7,11 +7,18 @@ export interface ExportReview {
   card: TradeCard;
   verdict: Verdict;
   verdictHistory: FinalVerdict[];
+  stress: StressOutcome | null;
   sources: SourceRef[];
   feed: FeedItem[];
   thesis: string;
   demo: boolean;
   reviewedAt: number;
+}
+
+function stressLabel(stress: StressOutcome): string {
+  return stress === "upheld"
+    ? "stress-tested — blessing upheld"
+    : "stress-tested — preliminary blessing withdrawn";
 }
 
 // Exports travel without the page around them, so the canonical URL and the
@@ -71,6 +78,7 @@ export function reviewToMarkdown(review: ExportReview): string {
     `reviewed ${isoDate(review.reviewedAt)} by [Veto](${SITE_URL})`,
   ];
   if (rounds > 0) meta.push(`contested ×${rounds} — verdict ${outcomeOf(verdictHistory)}`);
+  if (review.stress) meta.push(stressLabel(review.stress));
   lines.push(meta.join(" · "));
   if (demo) {
     lines.push("");
@@ -332,6 +340,17 @@ function paint(
     y += 34;
     setFont(500, 15, f.mono, "1.5px");
     put(`CONTESTED ×${rounds} · VERDICT ${outcomeOf(verdictHistory)?.toUpperCase()}`, x, y, t.muted);
+  }
+  if (review.stress) {
+    // 30 is the stacking offset under CONTESTED; 34 is the first-sub-line slot.
+    y += rounds > 0 ? 30 : 34;
+    setFont(500, 15, f.mono, "1.5px");
+    put(
+      `STRESS-TESTED · ${review.stress === "upheld" ? "BLESSING UPHELD" : "PRELIMINARY BLESSING WITHDRAWN"}`,
+      x,
+      y,
+      t.muted,
+    );
   }
   y += 42;
   setFont(400, 19, f.sans);

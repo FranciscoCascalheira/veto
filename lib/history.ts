@@ -1,12 +1,14 @@
-import type { FinalVerdict, SourceRef, TradeCard, Verdict } from "./types";
+import type { FinalVerdict, SourceRef, StressOutcome, TradeCard, Verdict } from "./types";
 
 // One item of the review-desk feed, as rendered by the UI and persisted with
-// each review.
+// each review. "stress" marks the desk turning on its own preliminary
+// blessing.
 export type FeedItem =
   | { kind: "text"; text: string }
   | { kind: "search"; query: string }
   | { kind: "fetch"; url: string }
-  | { kind: "challenge"; text: string };
+  | { kind: "challenge"; text: string }
+  | { kind: "stress" };
 
 // A finished review as kept in this browser's localStorage — no accounts, no
 // server storage. `transcript` is the client-held conversation that lets the
@@ -22,6 +24,7 @@ export interface StoredReview {
   card: TradeCard;
   verdict: Verdict;
   verdictHistory: FinalVerdict[];
+  stress: StressOutcome | null;
   sources: SourceRef[];
   feed: FeedItem[];
   transcript: unknown[] | null;
@@ -74,6 +77,7 @@ export function loadHistory(): StoredReview[] {
     .map((entry) => ({
       ...entry,
       demo: entry.demo === true,
+      stress: entry.stress === "upheld" || entry.stress === "withdrawn" ? entry.stress : null,
       transcript: Array.isArray(entry.transcript) ? entry.transcript : null,
       invalidationClosed: entry.invalidationClosed === true,
     }))

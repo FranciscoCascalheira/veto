@@ -255,6 +255,7 @@ export const DEMO_DELAYS: Record<EngineEvent["t"], number> = {
   search: 650,
   fetch: 650,
   sources: 300,
+  stress: 400,
   verdict: 400,
   transcript: 0,
   error: 0,

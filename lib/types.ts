@@ -1,6 +1,9 @@
 export type Direction = "long" | "short";
 export type PremiseState = "CONFIRMED" | "PARTIAL" | "FALSE" | "UNVERIFIABLE";
 export type FinalVerdict = "BLESSED" | "REFUSED";
+// Outcome of the desk attacking its own preliminary blessing: the blessing
+// survived, or it was withdrawn and the delivered verdict is REFUSED.
+export type StressOutcome = "upheld" | "withdrawn";
 
 export interface Premise {
   id: string;
@@ -52,6 +55,9 @@ export type EngineEvent =
   | { t: "search"; v: string }
   | { t: "fetch"; v: string }
   | { t: "sources"; v: SourceRef[] }
+  // "begin" marks the desk turning on its own preliminary blessing; the
+  // outcome arrives just before the final verdict.
+  | { t: "stress"; v: "begin" | StressOutcome }
   | { t: "verdict"; v: Verdict }
   // Opaque conversation history, held client-side (no server storage) and
   // returned verbatim with an argue-back challenge to continue the review.

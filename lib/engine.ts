@@ -1,9 +1,11 @@
 import Anthropic from "@anthropic-ai/sdk";
-import type { EngineEvent, SourceRef, TradeCard, Verdict } from "./types";
-import { STRUCTURE_SYSTEM, VERIFY_SYSTEM, argueBrief, verifyBrief } from "./prompts";
+import type { EngineEvent, SourceRef, StressOutcome, TradeCard, Verdict } from "./types";
+import { STRUCTURE_SYSTEM, VERIFY_SYSTEM, argueBrief, stressBrief, verifyBrief } from "./prompts";
 
 const MODEL = "claude-opus-4-8";
-const MAX_LOOP_ITERATIONS = 8;
+// The stress round adds up to two extra turns (attack + possible pause_turn)
+// on top of the ordinary verify loop.
+const MAX_LOOP_ITERATIONS = 10;
 
 const CARD_JSON_SCHEMA: Anthropic.Messages.Tool.InputSchema = {
   type: "object",
@@ -251,15 +253,17 @@ function harvestSources(sources: Map<string, SourceRef>, content: unknown) {
 // The verify/attack loop. Appends to `messages` in place — including the
 // closing tool_result for submit_verdict, so the finished transcript can be
 // continued with a follow-up user turn (argue-back) without a dangling
-// tool call. Returns the verdict via the generator's return value.
+// tool call. Returns the verdict (and the stress-test outcome, when a
+// preliminary blessing was attacked) via the generator's return value.
 async function* runVerifyLoop(
   client: Anthropic,
   messages: Anthropic.Messages.MessageParam[],
   sources: Map<string, SourceRef>,
-): AsyncGenerator<EngineEvent, Verdict | null> {
+): AsyncGenerator<EngineEvent, { verdict: Verdict | null; stress: StressOutcome | null }> {
   const tools = buildTools();
   let verdict: Verdict | null = null;
   let forcedFinal = false;
+  let stressed = false;
 
   for (let iteration = 0; iteration < MAX_LOOP_ITERATIONS && !verdict; iteration++) {
     const stream = client.messages.stream({
@@ -326,7 +330,28 @@ async function* runVerifyLoop(
         (b) => b.type === "tool_use" && b.name === "submit_verdict",
       );
       if (verdictBlock && verdictBlock.type === "tool_use") {
-        verdict = verdictBlock.input as Verdict;
+        const submitted = verdictBlock.input as Verdict;
+        // House rule: no blessing leaves the desk untested. The first BLESSED
+        // of a round is logged, not delivered — the desk attacks it once and
+        // resubmits. Refusals ship as-is (default-to-protection covers them),
+        // and a forced-final submission is never reopened.
+        if (submitted.verdict === "BLESSED" && !stressed && !forcedFinal) {
+          stressed = true;
+          messages.push({
+            role: "user",
+            content: [
+              {
+                type: "tool_result",
+                tool_use_id: verdictBlock.id,
+                content: "Preliminary verdict logged, not delivered. Instructions follow.",
+              },
+              { type: "text", text: stressBrief() },
+            ],
+          });
+          yield { t: "stress", v: "begin" };
+          continue;
+        }
+        verdict = submitted;
         messages.push({
           role: "user",
           content: [
@@ -353,13 +378,16 @@ async function* runVerifyLoop(
     }
   }
 
-  return verdict;
+  const stress: StressOutcome | null =
+    stressed && verdict ? (verdict.verdict === "BLESSED" ? "upheld" : "withdrawn") : null;
+  return { verdict, stress };
 }
 
 async function* emitOutcome(
   verdict: Verdict,
   sources: Map<string, SourceRef>,
   messages: Anthropic.Messages.MessageParam[],
+  stress: StressOutcome | null,
 ): AsyncGenerator<EngineEvent> {
   if (sources.size > 0) {
     // Cited sources first so the UI's url->title map favors what was read.
@@ -369,6 +397,8 @@ async function* emitOutcome(
     };
   }
   yield { t: "stage", v: "verdict" };
+  // Outcome before the verdict, so the UI knows it as the verdict renders.
+  if (stress) yield { t: "stress", v: stress };
   yield { t: "verdict", v: verdict };
   // The conversation so far, held by the client (no server-side storage) and
   // sent back verbatim to continue the review with an argue-back turn.
@@ -389,13 +419,13 @@ export async function* runRefutation(
     { role: "user", content: verifyBrief(card, thesis) },
   ];
   const sources = new Map<string, SourceRef>();
-  const verdict = yield* runVerifyLoop(client, messages, sources);
+  const { verdict, stress } = yield* runVerifyLoop(client, messages, sources);
 
   if (!verdict) {
     yield { t: "error", v: "The reviewer finished without submitting a verdict. Run it again." };
     return;
   }
-  yield* emitOutcome(verdict, sources, messages);
+  yield* emitOutcome(verdict, sources, messages, stress);
 }
 
 // Shallow structural check on a client-held transcript before it goes back to
@@ -431,7 +461,7 @@ export async function* runArgueBack(
     ...transcript,
     { role: "user", content: argueBrief(challenge) },
   ];
-  const verdict = yield* runVerifyLoop(client, messages, sources);
+  const { verdict, stress } = yield* runVerifyLoop(client, messages, sources);
 
   if (!verdict) {
     yield {
@@ -440,5 +470,5 @@ export async function* runArgueBack(
     };
     return;
   }
-  yield* emitOutcome(verdict, sources, messages);
+  yield* emitOutcome(verdict, sources, messages, stress);
 }

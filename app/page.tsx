@@ -6,6 +6,7 @@ import type {
   FinalVerdict,
   PremiseState,
   SourceRef,
+  StressOutcome,
   TradeCard,
   Verdict,
 } from "@/lib/types";
@@ -50,6 +51,7 @@ type ActiveReview = {
   sources: SourceRef[];
   verdictHistory: FinalVerdict[];
   verdict: Verdict | null;
+  stress: StressOutcome | null;
   transcript: unknown[] | null;
 };
 
@@ -80,6 +82,7 @@ export default function Home() {
   const [sources, setSources] = useState<SourceRef[]>([]);
   const [verdict, setVerdict] = useState<Verdict | null>(null);
   const [verdictHistory, setVerdictHistory] = useState<Verdict["verdict"][]>([]);
+  const [stress, setStress] = useState<StressOutcome | null>(null);
   const [transcript, setTranscript] = useState<unknown[] | null>(null);
   const [isDemo, setIsDemo] = useState(false);
   const [challenge, setChallenge] = useState("");
@@ -138,6 +141,15 @@ export default function Home() {
         setSources(event.v);
         if (active) active.sources = event.v;
         break;
+      case "stress":
+        if (event.v === "begin") {
+          setFeed((prev) => appendFeed(prev, { kind: "stress" }));
+          if (active) active.feed = appendFeed(active.feed, { kind: "stress" });
+        } else {
+          setStress(event.v);
+          if (active) active.stress = event.v;
+        }
+        break;
       case "verdict":
         setVerdict(event.v);
         setVerdictHistory((prev) => [...prev, event.v.verdict]);
@@ -169,6 +181,7 @@ export default function Home() {
               card: active.card,
               verdict: active.verdict,
               verdictHistory: active.verdictHistory,
+              stress: active.stress,
               sources: active.sources,
               feed: active.feed,
               transcript: active.transcript,
@@ -226,6 +239,7 @@ export default function Home() {
       sources: [],
       verdictHistory: [],
       verdict: null,
+      stress: null,
       transcript: null,
     };
     setCard(null);
@@ -233,6 +247,7 @@ export default function Home() {
     setSources([]);
     setVerdict(null);
     setVerdictHistory([]);
+    setStress(null);
     setTranscript(null);
     setIsDemo(demo);
     setChallenge("");
@@ -257,8 +272,12 @@ export default function Home() {
     setError(null);
     setStatus("verifying");
     setFeed((prev) => appendFeed(prev, { kind: "challenge", text }));
+    // A stress outcome describes the round that produced the current verdict;
+    // the new round starts clean and earns its own (or none).
+    setStress(null);
     if (activeRef.current) {
       activeRef.current.feed = appendFeed(activeRef.current.feed, { kind: "challenge", text });
+      activeRef.current.stress = null;
     }
 
     try {
@@ -288,6 +307,7 @@ export default function Home() {
       sources: entry.sources,
       verdictHistory: [...entry.verdictHistory],
       verdict: entry.verdict,
+      stress: entry.stress,
       transcript: entry.transcript,
     };
     if (entry.thesis) setThesis(entry.thesis);
@@ -296,6 +316,7 @@ export default function Home() {
     setSources(entry.sources);
     setVerdict(entry.verdict);
     setVerdictHistory(entry.verdictHistory);
+    setStress(entry.stress);
     setTranscript(entry.transcript);
     setIsDemo(entry.demo);
     setChallenge("");
@@ -335,6 +356,7 @@ export default function Home() {
       card,
       verdict,
       verdictHistory,
+      stress: active.stress,
       sources,
       feed,
       thesis: active.thesis,
@@ -548,6 +570,17 @@ export default function Home() {
                         </span>
                         {item.text}
                       </p>
+                    ) : item.kind === "stress" ? (
+                      <p
+                        key={i}
+                        className="border-l-2 border-accent/50 pl-3 text-foreground/85"
+                      >
+                        <span className="mr-2 font-mono text-xs uppercase tracking-wider text-accent">
+                          stress test
+                        </span>
+                        House rule: no blessing leaves the desk untested. The desk
+                        now attacks its own verdict.
+                      </p>
                     ) : (
                       <p key={i} className="font-mono text-xs text-muted">
                         <span className="text-accent">
@@ -586,6 +619,14 @@ export default function Home() {
                     verdictHistory[verdictHistory.length - 2]
                       ? "verdict upheld"
                       : "verdict overturned"}
+                  </p>
+                )}
+                {stress && (
+                  <p className="mt-1 font-mono text-xs uppercase tracking-wider text-muted">
+                    stress-tested ·{" "}
+                    {stress === "upheld"
+                      ? "blessing upheld"
+                      : "preliminary blessing withdrawn"}
                   </p>
                 )}
                 <p className="mt-3 text-sm leading-relaxed text-foreground/90">

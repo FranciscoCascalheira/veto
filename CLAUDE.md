@@ -68,8 +68,25 @@ Model: `claude-opus-4-8` with server-side `web_search_20260209` +
 4. **Export** — shipped. Copy-as-Markdown + verdict PNG drawn on canvas from
    the live design tokens; artifacts carry date, sample marker, disclaimer.
 
-v3 is undecided — propose before building. Out of scope until further
-notice: accounts, databases, broker integrations, payments, effort tiers.
+## Roadmap — v3 (decided 2026-07-13, in priority order)
+
+1. **Blessing under fire** — shipped. A preliminary BLESSED is logged, not
+   delivered: the desk attacks it once in the same verify loop (streamed to
+   the feed) and the blessing is upheld or withdrawn on evidence. Refusals
+   ship untouched; forced-final submissions are never reopened. Outcome rides
+   `EngineEvent{t:"stress"}`, history, and both export artifacts.
+2. **Launch readiness.** og:image for shared links; history backup/import as
+   a JSON file (keeps the no-accounts stance).
+3. **Launch pack.** Publish devlog 001, write devlog 002 (the v2/v3 story),
+   draft Show HN / fintwit / LinkedIn posts. Francisco does the posting.
+4. **The desk interrogates first.** A vague thesis (no invalidation, horizon,
+   or catalyst) gets 2-3 pointed questions before structuring, riding the
+   client-held continuation.
+5. **Re-check all.** Batch re-check of open invalidations — cost-gated and
+   explicit (each is a full argue round).
+
+Out of scope until further notice: accounts, databases, broker integrations,
+payments, effort tiers.
 
 ## Hard rules
 

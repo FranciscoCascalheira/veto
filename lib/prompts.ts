@@ -44,6 +44,23 @@ export function argueBrief(challenge: string): string {
   ].join("\n");
 }
 
+// Delivered together with the tool_result of a preliminary BLESSED verdict:
+// the desk attacks its own blessing once before it ships.
+export function stressBrief(): string {
+  const today = new Date().toISOString().slice(0, 10);
+  return [
+    `Today's date: ${today}.`,
+    ``,
+    `You blessed this card. House rule: no blessing leaves the desk untested — your verdict is logged, not delivered.`,
+    ``,
+    `Attack your own verdict before it ships:`,
+    `- Assume the thesis fails within its horizon. Name the most likely mechanism of failure and go looking for it.`,
+    `- Hunt disconfirming evidence specifically: search AGAINST the premises you confirmed — contradicting filings, guidance walk-backs, competitive counter-moves, crowding, a catalyst already priced in. Fresh sources only.`,
+    `- This is not an invitation to fold. Withdraw the blessing only if the attack surfaces evidence that fails a desk rule; do not manufacture doubt to look rigorous.`,
+    `- Then call submit_verdict exactly once more with the final verdict: BLESSED if the blessing survived — keep classifications current and sharpen the bear case and red flags with what the attack found — or REFUSED if it did not, with verdict_reason naming exactly what the stress test surfaced.`,
+  ].join("\n");
+}
+
 export function verifyBrief(card: TradeCard, originalThesis: string): string {
   const today = new Date().toISOString().slice(0, 10);
   return [
