@@ -9,21 +9,21 @@ export const DEMO_EVENTS: EngineEvent[] = [
   {
     t: "card",
     v: {
-      ticker: "ACME",
-      company: "Acme Robotics (fictional — sample review)",
+      ticker: "HLCN",
+      company: "Halcyon Robotics (fictional — sample review)",
       direction: "long",
       horizon: "3-6 months",
       thesis_summary:
-        "Trader expects a re-rating after Acme's announced defense contract: a claimed $400M multi-year award from the US Army, a valuation below 10x forward earnings, and squeeze fuel from ~30% short interest. Target +50% in 3-6 months; stated exit below $22.",
+        "Trader expects a re-rating after Halcyon's announced defense contract: a claimed $400M multi-year award from the US Army, a valuation below 10x forward earnings, and squeeze fuel from ~30% short interest. Target +50% in 3-6 months; stated exit below $22.",
       premises: [
         {
           id: "P1",
-          claim: "Acme signed a $400M multi-year contract with the US Army in June 2026.",
+          claim: "Halcyon signed a $400M multi-year contract with the US Army in June 2026.",
           load_bearing: true,
         },
         {
           id: "P2",
-          claim: "Acme trades below 10x forward earnings.",
+          claim: "Halcyon trades below 10x forward earnings.",
           load_bearing: true,
         },
         {
@@ -37,24 +37,24 @@ export const DEMO_EVENTS: EngineEvent[] = [
   },
   { t: "stage", v: "verifying" },
   { t: "text", v: "Sample review of a fictional ticker — illustrative only.\n" },
-  { t: "search", v: "Acme Robotics US Army contract $400M June 2026" },
+  { t: "search", v: "Halcyon Robotics US Army contract $400M June 2026" },
   {
     t: "text",
     v: "P1: the June press release announces a letter of intent, not a signed contract. Checking procurement records.\n",
   },
-  { t: "fetch", v: "https://ir.acme-robotics.example/press/2026-06-12" },
+  { t: "fetch", v: "https://ir.halcyon-robotics.example/press/2026-06-12" },
   {
     t: "text",
     v: "No award in official procurement records. \"Agreed\" is not \"signed\" — P1 is FALSE.\n",
   },
-  { t: "search", v: "ACME forward earnings estimates 2026" },
+  { t: "search", v: "HLCN forward earnings estimates 2026" },
   {
     t: "text",
     v: "P2: consensus puts it near 12x forward, not sub-10x. Directionally cheap, overstated — PARTIAL.\n",
   },
-  { t: "search", v: "ACME short interest percent of float" },
+  { t: "search", v: "HLCN short interest percent of float" },
   { t: "text", v: "P3: ~31% of float per exchange data — CONFIRMED.\n" },
-  { t: "search", v: "Acme Robotics insider transactions" },
+  { t: "search", v: "Halcyon Robotics insider transactions" },
   {
     t: "text",
     v: "Sweep: CFO sold two weeks after the LOI. Announcement-day gap of +18% suggests the \"contract\" is partly priced in.\n",

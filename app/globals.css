@@ -4,7 +4,7 @@
   --background: #14110d;
   --surface: #1b1712;
   --surface-2: #221d16;
-  --border: #2c2620;
+  --edge: #2c2620;
   --foreground: #e9e2d4;
   --muted: #8f8471;
   --accent: #e8a33d;
@@ -16,7 +16,7 @@
   --color-background: var(--background);
   --color-surface: var(--surface);
   --color-surface-2: var(--surface-2);
-  --color-edge: var(--border);
+  --color-edge: var(--edge);
   --color-foreground: var(--foreground);
   --color-muted: var(--muted);
   --color-accent: var(--accent);
@@ -35,4 +35,39 @@ body {
 ::selection {
   background: var(--accent);
   color: var(--background);
+}
+
+@keyframes enter {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.animate-enter {
+  animation: enter 200ms ease-out;
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--surface-2) 25%,
+    var(--edge) 50%,
+    var(--surface-2) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.6s linear infinite;
 }

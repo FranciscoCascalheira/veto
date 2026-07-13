@@ -131,6 +131,8 @@ export default function Home() {
   const running = status === "structuring" || status === "verifying";
   const verdictFor = (id: string): PremiseState | null =>
     verdict?.premise_verdicts.find((p) => p.id === id)?.verdict ?? null;
+  const evidenceFor = (id: string): string | null =>
+    verdict?.premise_verdicts.find((p) => p.id === id)?.evidence ?? null;
 
   return (
     <div className="mx-auto w-full max-w-2xl px-5 pb-24 pt-16">
@@ -151,7 +153,7 @@ export default function Home() {
           onChange={(e) => setThesis(e.target.value)}
           placeholder={PLACEHOLDER}
           rows={6}
-          className="w-full resize-y rounded-md border border-edge bg-surface-2 p-3 text-sm leading-relaxed text-foreground placeholder:text-muted/60 focus:border-accent/60 focus:outline-none"
+          className="w-full resize-y rounded-md border border-edge bg-surface-2 p-3 text-sm leading-relaxed text-foreground placeholder:text-muted focus:border-accent/60 focus:outline-none"
         />
         <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
           <input
@@ -159,12 +161,12 @@ export default function Home() {
             value={apiKey}
             onChange={(e) => saveKey(e.target.value)}
             placeholder="sk-ant-… (your Anthropic API key)"
-            className="flex-1 rounded-md border border-edge bg-surface-2 px-3 py-2 font-mono text-xs text-foreground placeholder:text-muted/60 focus:border-accent/60 focus:outline-none"
+            className="flex-1 rounded-md border border-edge bg-surface-2 px-3 py-2 font-mono text-xs text-foreground placeholder:text-muted focus:border-accent/60 focus:outline-none"
           />
           <button
             onClick={() => run()}
             disabled={running || thesis.trim().length < 20}
-            className="rounded-md bg-accent px-5 py-2 text-sm font-medium text-background transition-opacity disabled:opacity-40"
+            className="rounded-md bg-accent px-5 py-2 text-sm font-medium text-background transition-colors duration-150 hover:bg-accent/90 disabled:opacity-40"
           >
             {running ? "Under review…" : "Submit for review"}
           </button>
@@ -176,7 +178,7 @@ export default function Home() {
           <button
             onClick={() => run(true)}
             disabled={running}
-            className="underline decoration-muted/50 underline-offset-2 hover:text-foreground disabled:opacity-40"
+            className="underline decoration-muted/50 underline-offset-2 transition-colors duration-150 hover:text-foreground disabled:opacity-40"
           >
             Watch a sample review
           </button>
@@ -189,14 +191,23 @@ export default function Home() {
           <section className="mt-10 space-y-6">
             <div className="flex items-center gap-3 font-mono text-xs uppercase tracking-widest text-muted">
               <StageDot active={status === "structuring"} done={card !== null} label="Structure" />
-              <span className="text-edge">—</span>
+              <span className="text-muted/40">—</span>
               <StageDot active={status === "verifying"} done={verdict !== null} label="Verify + attack" />
-              <span className="text-edge">—</span>
+              <span className="text-muted/40">—</span>
               <StageDot active={false} done={verdict !== null} label="Verdict" />
             </div>
 
+            {status === "structuring" && !card && (
+              <div className="animate-enter rounded-lg border border-edge bg-surface p-4">
+                <div className="skeleton h-5 w-40 rounded" />
+                <div className="skeleton mt-4 h-4 w-full rounded" />
+                <div className="skeleton mt-2 h-4 w-4/5 rounded" />
+                <div className="skeleton mt-2 h-4 w-3/5 rounded" />
+              </div>
+            )}
+
             {card && (
-              <div className="rounded-lg border border-edge bg-surface p-4">
+              <div className="animate-enter rounded-lg border border-edge bg-surface p-4">
                 <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
                   <span className="font-mono text-lg font-semibold text-foreground">
                     {card.ticker}
@@ -209,27 +220,35 @@ export default function Home() {
                 <p className="mt-3 text-sm leading-relaxed text-foreground/90">
                   {card.thesis_summary}
                 </p>
-                <ul className="mt-4 space-y-2">
+                <ul className="mt-4 space-y-2.5">
                   {card.premises.map((p) => {
                     const state = verdictFor(p.id);
+                    const evidence = evidenceFor(p.id);
                     return (
-                      <li key={p.id} className="flex items-start gap-3 text-sm">
-                        <span className="mt-0.5 font-mono text-xs text-muted">{p.id}</span>
-                        <span className="flex-1 leading-snug text-foreground/90">
-                          {p.claim}
-                          {p.load_bearing && (
-                            <span className="ml-2 font-mono text-[10px] uppercase tracking-wider text-muted">
-                              load-bearing
-                            </span>
-                          )}
-                        </span>
-                        <span
-                          className={`shrink-0 rounded border px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider ${
-                            state ? PREMISE_BADGE[state] : "border-edge text-muted/60"
-                          }`}
-                        >
-                          {state ?? "checking"}
-                        </span>
+                      <li key={p.id} className="text-sm">
+                        <div className="flex items-start gap-3">
+                          <span className="mt-0.5 font-mono text-xs text-muted">{p.id}</span>
+                          <span className="flex-1 leading-snug text-foreground/90">
+                            {p.claim}
+                            {p.load_bearing && (
+                              <span className="ml-2 font-mono text-[11px] uppercase tracking-wider text-muted">
+                                load-bearing
+                              </span>
+                            )}
+                          </span>
+                          <span
+                            className={`shrink-0 rounded border px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider ${
+                              state ? PREMISE_BADGE[state] : "border-edge text-muted"
+                            }`}
+                          >
+                            {state ?? "checking"}
+                          </span>
+                        </div>
+                        {evidence && (
+                          <p className="mt-1 pl-8 text-xs leading-snug text-muted">
+                            {evidence}
+                          </p>
+                        )}
                       </li>
                     );
                   })}
@@ -243,7 +262,7 @@ export default function Home() {
             )}
 
             {feed.length > 0 && (
-              <div className="rounded-lg border border-edge bg-surface p-4">
+              <div className="animate-enter rounded-lg border border-edge bg-surface p-4">
                 <h2 className="font-mono text-xs uppercase tracking-widest text-muted">
                   Review desk
                 </h2>
@@ -263,7 +282,7 @@ export default function Home() {
                     ),
                   )}
                   {status === "verifying" && (
-                    <p className="font-mono text-xs text-muted/60">working…</p>
+                    <p className="font-mono text-xs text-muted">working…</p>
                   )}
                 </div>
               </div>
@@ -271,7 +290,7 @@ export default function Home() {
 
             {verdict && (
               <div
-                className={`rounded-lg border-2 p-5 ${
+                className={`animate-enter rounded-lg border-2 p-5 ${
                   verdict.verdict === "REFUSED"
                     ? "border-refused/70 bg-refused/5"
                     : "border-blessed/70 bg-blessed/5"
@@ -319,15 +338,25 @@ export default function Home() {
             )}
 
             {error && (
-              <div className="rounded-lg border border-refused/50 bg-refused/5 p-4 text-sm text-foreground/90">
-                {error}
+              <div className="animate-enter rounded-lg border border-refused/50 bg-refused/5 p-4">
+                <h2 className="font-mono text-xs uppercase tracking-widest text-refused">
+                  Review failed
+                </h2>
+                <p className="mt-1.5 text-sm leading-relaxed text-foreground/90">{error}</p>
+                <button
+                  onClick={() => run()}
+                  disabled={thesis.trim().length < 20}
+                  className="mt-3 rounded-md bg-accent px-4 py-1.5 text-sm font-medium text-background transition-colors duration-150 hover:bg-accent/90 disabled:opacity-40"
+                >
+                  Try again
+                </button>
               </div>
             )}
           </section>
         )}
       </div>
 
-      <footer className="mt-16 border-t border-edge pt-5 text-xs leading-relaxed text-muted">
+      <footer className="mt-16 border-t border-edge pt-5 text-sm leading-relaxed text-muted">
         <p>
           Veto reviews the argument you wrote — it does not rate securities.
           Nothing here is investment advice or a recommendation to buy or sell
@@ -341,7 +370,7 @@ export default function Home() {
 
 function StageDot({ active, done, label }: { active: boolean; done: boolean; label: string }) {
   return (
-    <span className={done ? "text-foreground" : active ? "text-accent" : "text-muted/50"}>
+    <span className={done ? "text-foreground" : active ? "text-accent" : "text-muted"}>
       {label}
     </span>
   );
