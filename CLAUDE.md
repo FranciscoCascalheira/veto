@@ -68,7 +68,7 @@ Model: `claude-opus-4-8` with server-side `web_search_20260209` +
 4. **Export** — shipped. Copy-as-Markdown + verdict PNG drawn on canvas from
    the live design tokens; artifacts carry date, sample marker, disclaimer.
 
-## Roadmap — v3 (decided 2026-07-13, in priority order)
+## Roadmap — v3 (decided 2026-07-13; all five SHIPPED 2026-07-13/14)
 
 1. **Blessing under fire** — shipped. A preliminary BLESSED is logged, not
    delivered: the desk attacks it once in the same verify loop (streamed to
@@ -79,8 +79,9 @@ Model: `claude-opus-4-8` with server-side `web_search_20260209` +
    `app/opengraph-image.png`/`twitter-image.png`, metadataBase in the layout);
    history backup/import as a versioned JSON file, merge-by-id, restorable
    into a cleared browser (keeps the no-accounts stance).
-3. **Launch pack.** Publish devlog 001, write devlog 002 (the v2/v3 story),
-   draft Show HN / fintwit / LinkedIn posts. Francisco does the posting.
+3. **Launch pack** — drafted (`docs/devlog/002-*.md`, `docs/launch/posts.md`
+   with Show HN / X / LinkedIn drafts, devlogs linked from the README).
+   Publishing itself is Francisco's call — nothing auto-posts.
 4. **The desk interrogates first** — shipped. A thesis too thin to review (no
    identifiable security, or no checkable reason) gets a cheap intake pass
    (`runIntake`, no web tools) that asks 2-3 questions via `EngineEvent
@@ -92,8 +93,8 @@ Model: `claude-opus-4-8` with server-side `web_search_20260209` +
    accumulator then written to history; sequential, behind an explicit confirm
    with a cost note. Shed-transcript invalidations are skipped and counted.
 
-Out of scope until further notice: accounts, databases, broker integrations,
-payments, effort tiers.
+v4 is undecided — propose before building. Out of scope until further notice:
+accounts, databases, broker integrations, payments, effort tiers.
 
 ## Hard rules
 

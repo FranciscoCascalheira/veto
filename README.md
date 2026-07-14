@@ -51,9 +51,14 @@ Built with Next.js and the Claude API (`claude-opus-4-8` with server-side web se
 
 Veto is the productized core of a personal investment operating system: written trade cards, premise verification against second sources, and default-to-protection rules — run with real money, losses included. The engine's central rule exists because three of my own confidently-stated premises turned out to be false when actually checked. This tool is that lesson, automated.
 
+The devlog walks through the thinking:
+
+- [001 — I built a machine that refuses to approve my trades](docs/devlog/001-the-machine-that-argues-back.md)
+- [002 — a verdict you can argue with](docs/devlog/002-a-verdict-you-can-argue-with.md)
+
 ## Roadmap
 
-Only if people actually want it: append-only trade ledger, process scoreboard (measure the process, not the picks), level-watch alerts ("your invalidation fired — write the verdict"), broker CSV import, hosted version.
+The verdict is now contestable (argue back), self-doubting (it attacks its own blessings), gated (it asks before reviewing a thin thesis), and durable (local history, open-invalidation tracking, markdown/PNG export). Anything further waits on real use: an append-only trade ledger, a process scoreboard (measure the process, not the picks), broker CSV import.
 
 ## License
 
