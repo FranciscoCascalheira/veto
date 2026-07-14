@@ -40,6 +40,14 @@ const DEMO_HISTORY_ID = "demo-sample";
 const DEMO_RECHECK_CHALLENGE =
   "The Army's FY2027 budget line funding this program was approved last week — the LOI is as good as signed.";
 
+// The challenge a re-check submits: a time check on the review's own
+// invalidation. The demo answers a fixed challenge, so it gets that one.
+function recheckChallengeFor(entry: StoredReview): string {
+  return entry.demo
+    ? DEMO_RECHECK_CHALLENGE
+    : `Time check on the invalidation this review set: "${entry.verdict.suggested_invalidation}" — has it triggered since? Verify against fresh sources as of today and update the verdict.`;
+}
+
 // Mutable mirror of the review currently on screen. handleEvent runs inside
 // the streaming loop where React state reads would be stale, so the data a
 // finished round persists to history is accumulated here.
@@ -64,6 +72,40 @@ function appendFeed(prev: FeedItem[], item: FeedItem): FeedItem[] {
     return [...prev.slice(0, -1), { kind: "text", text: last.text + item.text }];
   }
   return [...prev, item];
+}
+
+// Fold one engine event into a private review accumulator — the batch
+// re-check's counterpart to handleEvent, with no React state and no visible
+// side effects. Only the events an argue round emits are handled.
+function applyEventToReview(acc: ActiveReview, event: EngineEvent) {
+  switch (event.t) {
+    case "card":
+      acc.card = event.v;
+      break;
+    case "text":
+      acc.feed = appendFeed(acc.feed, { kind: "text", text: event.v });
+      break;
+    case "search":
+      acc.feed = appendFeed(acc.feed, { kind: "search", query: event.v });
+      break;
+    case "fetch":
+      acc.feed = appendFeed(acc.feed, { kind: "fetch", url: event.v });
+      break;
+    case "sources":
+      acc.sources = event.v;
+      break;
+    case "stress":
+      if (event.v === "begin") acc.feed = appendFeed(acc.feed, { kind: "stress" });
+      else acc.stress = event.v;
+      break;
+    case "verdict":
+      acc.verdict = event.v;
+      acc.verdictHistory = [...acc.verdictHistory, event.v.verdict];
+      break;
+    case "transcript":
+      acc.transcript = event.v;
+      break;
+  }
 }
 
 const PLACEHOLDER = `Example: Buying CRWV around $87. CoreWeave signed a multi-billion dollar capacity deal with Meta, analyst targets sit well above $130, and AI compute demand keeps outrunning supply. Expecting +40% in 3-6 months. I'd get out below $78.`;
@@ -96,6 +138,14 @@ export default function Home() {
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
   const [pngState, setPngState] = useState<"idle" | "working" | "saved" | "failed">("idle");
   const [historyMsg, setHistoryMsg] = useState<{ text: string; error: boolean } | null>(null);
+  const [recheckState, setRecheckState] = useState<{
+    done: number;
+    total: number;
+    current: string | null;
+    failed: number;
+    running: boolean;
+  } | null>(null);
+  const [recheckConfirm, setRecheckConfirm] = useState(false);
   const resultRef = useRef<HTMLDivElement>(null);
   const argueRef = useRef<HTMLDivElement>(null);
   const activeRef = useRef<ActiveReview | null>(null);
@@ -204,7 +254,14 @@ export default function Home() {
     }
   }
 
-  async function streamReview(payload: Record<string, unknown>, withKey: boolean) {
+  // Drive one SSE review, dispatching each event to `onEvent`. The main flow
+  // passes handleEvent (updates the visible review); the batch re-check passes
+  // a handler that writes into a private accumulator instead.
+  async function consumeStream(
+    payload: Record<string, unknown>,
+    withKey: boolean,
+    onEvent: (event: EngineEvent) => void,
+  ) {
     const res = await fetch("/api/refute", {
       method: "POST",
       headers: {
@@ -232,9 +289,13 @@ export default function Home() {
       for (const part of parts) {
         const line = part.trim();
         if (!line.startsWith("data: ")) continue;
-        handleEvent(JSON.parse(line.slice(6)) as EngineEvent);
+        onEvent(JSON.parse(line.slice(6)) as EngineEvent);
       }
     }
+  }
+
+  function streamReview(payload: Record<string, unknown>, withKey: boolean) {
+    return consumeStream(payload, withKey, handleEvent);
   }
 
   async function run(demo = false) {
@@ -366,11 +427,7 @@ export default function Home() {
     const contestable = entry.demo || entry.transcript !== null;
     reopen(entry, false);
     if (contestable) {
-      setChallenge(
-        entry.demo
-          ? DEMO_RECHECK_CHALLENGE
-          : `Time check on the invalidation this review set: "${entry.verdict.suggested_invalidation}" — has it triggered since? Verify against fresh sources as of today and update the verdict.`,
-      );
+      setChallenge(recheckChallengeFor(entry));
       setTimeout(() => {
         argueRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
       }, 80);
@@ -470,6 +527,73 @@ export default function Home() {
 
   const running = status === "structuring" || status === "verifying";
   const openInvalidations = history.filter((entry) => !entry.invalidationClosed);
+  // Only reviews still holding their transcript (or the demo) can be contested
+  // in place, so only those can be batch re-checked; the rest were shed for
+  // space and would need a fresh full review.
+  const recheckTargets = openInvalidations.filter((e) => e.demo || e.transcript !== null);
+
+  // Re-check every contestable open invalidation in turn — each a full argue
+  // round run headless into a private accumulator, then written to history.
+  // Sequential on purpose: it spends a review per item, so it stays visible
+  // and gated behind an explicit confirm.
+  async function recheckAll() {
+    if (recheckState?.running || running) return;
+    const targets = recheckTargets;
+    if (targets.length === 0) return;
+    setRecheckConfirm(false);
+    let failed = 0;
+    for (let i = 0; i < targets.length; i++) {
+      const entry = targets[i];
+      setRecheckState({ done: i, total: targets.length, current: entry.card.ticker, failed, running: true });
+      const challenge = recheckChallengeFor(entry);
+      const acc: ActiveReview = {
+        id: entry.id,
+        createdAt: entry.createdAt,
+        updatedAt: entry.updatedAt,
+        demo: entry.demo,
+        thesis: entry.thesis,
+        card: entry.card,
+        feed: appendFeed([...entry.feed], { kind: "challenge", text: challenge }),
+        sources: entry.sources,
+        verdictHistory: [...entry.verdictHistory],
+        verdict: entry.verdict,
+        stress: entry.stress,
+        transcript: entry.transcript,
+      };
+      try {
+        await consumeStream(
+          entry.demo ? { demo: true, challenge } : { challenge, transcript: entry.transcript, code },
+          !entry.demo,
+          (event) => applyEventToReview(acc, event),
+        );
+        if (acc.verdict && acc.card) {
+          setHistory(
+            upsertReview({
+              id: acc.id,
+              createdAt: acc.createdAt,
+              updatedAt: Date.now(),
+              demo: acc.demo,
+              thesis: acc.thesis,
+              card: acc.card,
+              verdict: acc.verdict,
+              verdictHistory: acc.verdictHistory,
+              stress: acc.stress,
+              sources: acc.sources,
+              feed: acc.feed,
+              transcript: acc.transcript,
+              invalidationClosed: false,
+            }),
+          );
+        } else {
+          failed += 1;
+        }
+      } catch {
+        failed += 1;
+      }
+    }
+    setRecheckState({ done: targets.length, total: targets.length, current: null, failed, running: false });
+    setTimeout(() => setRecheckState(null), 6000);
+  }
   const verdictFor = (id: string): PremiseState | null =>
     verdict?.premise_verdicts.find((p) => p.id === id)?.verdict ?? null;
   const evidenceFor = (id: string): string | null =>
@@ -870,13 +994,71 @@ export default function Home() {
 
       {!running && openInvalidations.length > 0 && (
         <section className="animate-enter mt-10 rounded-lg border border-edge bg-surface p-4">
-          <h2 className="font-mono text-xs uppercase tracking-widest text-muted">
-            Open invalidations
-          </h2>
-          <p className="mt-1.5 text-xs text-muted">
-            Every verdict names the condition that should kill the trade. These
-            are still open — re-check one when time has passed or news lands.
-          </p>
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="font-mono text-xs uppercase tracking-widest text-muted">
+              Open invalidations
+            </h2>
+            {recheckState ? (
+              <span
+                className={`font-mono text-[11px] uppercase tracking-wider ${
+                  recheckState.running ? "text-accent" : "text-muted"
+                }`}
+              >
+                {recheckState.running ? (
+                  `Re-checking ${recheckState.current} · ${recheckState.done + 1}/${recheckState.total}`
+                ) : (
+                  <>
+                    Re-checked {recheckState.total - recheckState.failed}/{recheckState.total}
+                    {recheckState.failed > 0 && (
+                      <span className="text-refused"> · {recheckState.failed} failed</span>
+                    )}
+                  </>
+                )}
+              </span>
+            ) : recheckConfirm ? (
+              <span className="flex items-center gap-3 font-mono text-[11px] uppercase tracking-wider">
+                <button
+                  onClick={() => recheckAll()}
+                  className="text-accent transition-colors duration-150 hover:text-foreground"
+                >
+                  Confirm
+                </button>
+                <button
+                  onClick={() => setRecheckConfirm(false)}
+                  className="text-muted transition-colors duration-150 hover:text-foreground"
+                >
+                  Cancel
+                </button>
+              </span>
+            ) : (
+              recheckTargets.length >= 2 && (
+                <button
+                  onClick={() => setRecheckConfirm(true)}
+                  className="font-mono text-[11px] uppercase tracking-wider text-muted transition-colors duration-150 hover:text-foreground"
+                >
+                  Re-check all
+                </button>
+              )
+            )}
+          </div>
+          {recheckConfirm && !recheckState ? (
+            <p className="mt-2 font-mono text-[11px] text-muted">
+              Re-check {recheckTargets.length}
+              {recheckTargets.length < openInvalidations.length
+                ? ` of ${openInvalidations.length}`
+                : ""}{" "}
+              open {recheckTargets.length === 1 ? "invalidation" : "invalidations"}? Each runs a
+              full review.
+              {recheckTargets.length < openInvalidations.length
+                ? " The rest dropped their saved conversation to make room — re-check those individually as a fresh review."
+                : ""}
+            </p>
+          ) : (
+            <p className="mt-1.5 text-xs text-muted">
+              Every verdict names the condition that should kill the trade. These
+              are still open — re-check one when time has passed or news lands.
+            </p>
+          )}
           <ul className="mt-2 divide-y divide-edge">
             {openInvalidations.map((entry) => (
               <li key={entry.id} className="py-3 last:pb-0">
@@ -892,13 +1074,15 @@ export default function Home() {
                   <span className="flex-1" />
                   <button
                     onClick={() => recheck(entry)}
-                    className="font-mono text-[11px] uppercase tracking-wider text-accent transition-colors duration-150 hover:text-foreground"
+                    disabled={recheckState?.running}
+                    className="font-mono text-[11px] uppercase tracking-wider text-accent transition-colors duration-150 hover:text-foreground disabled:cursor-not-allowed"
                   >
                     Re-check
                   </button>
                   <button
                     onClick={() => markClosed(entry.id)}
-                    className="font-mono text-[11px] uppercase tracking-wider text-muted transition-colors duration-150 hover:text-foreground"
+                    disabled={recheckState?.running}
+                    className="font-mono text-[11px] uppercase tracking-wider text-muted transition-colors duration-150 hover:text-foreground disabled:cursor-not-allowed"
                   >
                     Mark closed
                   </button>

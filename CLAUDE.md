@@ -87,8 +87,10 @@ Model: `claude-opus-4-8` with server-side `web_search_20260209` +
    {t:"questions"}`; the trader answers (folded into the thesis) or reviews as
    written. `answers` on the request signals "past intake" so the second pass
    skips it. No new history entry; the original thesis is what's stored.
-5. **Re-check all.** Batch re-check of open invalidations — cost-gated and
-   explicit (each is a full argue round).
+5. **Re-check all** — shipped. Batch re-check of every contestable open
+   invalidation, each a full argue round run headless into a private
+   accumulator then written to history; sequential, behind an explicit confirm
+   with a cost note. Shed-transcript invalidations are skipped and counted.
 
 Out of scope until further notice: accounts, databases, broker integrations,
 payments, effort tiers.
