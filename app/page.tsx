@@ -11,8 +11,11 @@ import type {
   Verdict,
 } from "@/lib/types";
 import {
+  backupFilename,
   closeInvalidation,
   deleteReview,
+  exportHistory,
+  importHistory,
   loadHistory,
   newReviewId,
   upsertReview,
@@ -90,9 +93,11 @@ export default function Home() {
   const [history, setHistory] = useState<StoredReview[]>([]);
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
   const [pngState, setPngState] = useState<"idle" | "working" | "saved" | "failed">("idle");
+  const [historyMsg, setHistoryMsg] = useState<{ text: string; error: boolean } | null>(null);
   const resultRef = useRef<HTMLDivElement>(null);
   const argueRef = useRef<HTMLDivElement>(null);
   const activeRef = useRef<ActiveReview | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const savedKey = localStorage.getItem("veto-api-key");
@@ -392,6 +397,42 @@ export default function Home() {
 
   function removeEntry(id: string) {
     setHistory(deleteReview(id));
+  }
+
+  function flashHistory(text: string, error = false) {
+    setHistoryMsg({ text, error });
+    setTimeout(() => setHistoryMsg(null), 4000);
+  }
+
+  function backUpHistory() {
+    const now = Date.now();
+    downloadBlob(
+      new Blob([exportHistory(now)], { type: "application/json" }),
+      backupFilename(now),
+    );
+  }
+
+  function onImportFile(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    // Reset so re-picking the same file fires onChange again.
+    event.target.value = "";
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const result = importHistory(String(reader.result));
+        setHistory(result.history);
+        const parts: string[] = [];
+        if (result.added) parts.push(`${result.added} added`);
+        if (result.updated) parts.push(`${result.updated} updated`);
+        if (result.skipped) parts.push(`${result.skipped} already current`);
+        flashHistory(parts.length ? `Imported — ${parts.join(", ")}.` : "Nothing to import.");
+      } catch (err) {
+        flashHistory(err instanceof Error ? err.message : "Import failed.", true);
+      }
+    };
+    reader.onerror = () => flashHistory("Could not read that file.", true);
+    reader.readAsText(file);
   }
 
   function markClosed(id: string) {
@@ -835,11 +876,64 @@ export default function Home() {
               </li>
             ))}
           </ul>
-          <p className="mt-3 text-xs text-muted">
-            Reviews are saved in this browser only — nothing leaves your machine.
-          </p>
+          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-edge pt-3">
+            <p className="text-xs text-muted">
+              Reviews are saved in this browser only — nothing leaves your machine.
+            </p>
+            <div className="flex gap-x-4 sm:ml-auto">
+              <button
+                onClick={backUpHistory}
+                className="font-mono text-[11px] uppercase tracking-wider text-muted transition-colors duration-150 hover:text-foreground"
+              >
+                Back up
+              </button>
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="font-mono text-[11px] uppercase tracking-wider text-muted transition-colors duration-150 hover:text-foreground"
+              >
+                Import
+              </button>
+            </div>
+          </div>
+          {historyMsg && (
+            <p
+              className={`mt-2 font-mono text-[11px] ${
+                historyMsg.error ? "text-refused" : "text-muted"
+              }`}
+            >
+              {historyMsg.text}
+            </p>
+          )}
         </section>
       )}
+
+      {!running && history.length === 0 && status === "idle" && (
+        <div className="mt-10">
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="font-mono text-[11px] uppercase tracking-wider text-muted transition-colors duration-150 hover:text-foreground"
+          >
+            Restore a backup
+          </button>
+          {historyMsg && (
+            <p
+              className={`mt-2 font-mono text-[11px] ${
+                historyMsg.error ? "text-refused" : "text-muted"
+              }`}
+            >
+              {historyMsg.text}
+            </p>
+          )}
+        </div>
+      )}
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="application/json,.json"
+        onChange={onImportFile}
+        className="hidden"
+      />
 
       <footer className="mt-16 border-t border-edge pt-5 text-sm leading-relaxed text-muted">
         <p>

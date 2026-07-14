@@ -12,10 +12,26 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const TITLE = "Veto — the pre-trade gate that argues back";
+const DESCRIPTION =
+  "Paste your trade thesis. Veto decomposes it into falsifiable premises, verifies each against fresh sources, runs the bear case — and refuses to bless weak cards.";
+
 export const metadata: Metadata = {
-  title: "Veto — the pre-trade gate that argues back",
-  description:
-    "Paste your trade thesis. Veto decomposes it into falsifiable premises, verifies each against fresh sources, runs the bear case — and refuses to bless weak cards.",
+  metadataBase: new URL("https://veto-production.up.railway.app"),
+  title: TITLE,
+  description: DESCRIPTION,
+  openGraph: {
+    title: TITLE,
+    description: DESCRIPTION,
+    url: "/",
+    siteName: "Veto",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: TITLE,
+    description: DESCRIPTION,
+  },
 };
 
 export default function RootLayout({

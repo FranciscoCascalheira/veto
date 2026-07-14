@@ -75,8 +75,10 @@ Model: `claude-opus-4-8` with server-side `web_search_20260209` +
    the feed) and the blessing is upheld or withdrawn on evidence. Refusals
    ship untouched; forced-final submissions are never reopened. Outcome rides
    `EngineEvent{t:"stress"}`, history, and both export artifacts.
-2. **Launch readiness.** og:image for shared links; history backup/import as
-   a JSON file (keeps the no-accounts stance).
+2. **Launch readiness** — shipped. og:image + twitter card (static
+   `app/opengraph-image.png`/`twitter-image.png`, metadataBase in the layout);
+   history backup/import as a versioned JSON file, merge-by-id, restorable
+   into a cleared browser (keeps the no-accounts stance).
 3. **Launch pack.** Publish devlog 001, write devlog 002 (the v2/v3 story),
    draft Show HN / fintwit / LinkedIn posts. Francisco does the posting.
 4. **The desk interrogates first.** A vague thesis (no invalidation, horizon,

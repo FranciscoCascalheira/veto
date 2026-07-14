@@ -61,6 +61,19 @@ function isStoredReview(value: unknown): value is StoredReview {
   );
 }
 
+// Coerce the loosely-typed fields to their canonical form. Runs on both
+// localStorage reads and imported files, so a hand-edited or older export
+// can't smuggle a bad `stress`/`transcript`/flag through.
+function normalizeReview(entry: StoredReview): StoredReview {
+  return {
+    ...entry,
+    demo: entry.demo === true,
+    stress: entry.stress === "upheld" || entry.stress === "withdrawn" ? entry.stress : null,
+    transcript: Array.isArray(entry.transcript) ? entry.transcript : null,
+    invalidationClosed: entry.invalidationClosed === true,
+  };
+}
+
 export function loadHistory(): StoredReview[] {
   if (typeof window === "undefined") return [];
   let parsed: unknown;
@@ -74,13 +87,7 @@ export function loadHistory(): StoredReview[] {
   if (!Array.isArray(parsed)) return [];
   return parsed
     .filter(isStoredReview)
-    .map((entry) => ({
-      ...entry,
-      demo: entry.demo === true,
-      stress: entry.stress === "upheld" || entry.stress === "withdrawn" ? entry.stress : null,
-      transcript: Array.isArray(entry.transcript) ? entry.transcript : null,
-      invalidationClosed: entry.invalidationClosed === true,
-    }))
+    .map(normalizeReview)
     .sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
@@ -136,4 +143,85 @@ export function closeInvalidation(id: string): StoredReview[] {
   return persist(
     loadHistory().map((e) => (e.id === id ? { ...e, invalidationClosed: true } : e)),
   );
+}
+
+// ---------------------------------------------------------------------------
+// Backup / restore — a plain JSON file, no accounts. Lets a review survive a
+// cleared browser or move to another machine.
+// ---------------------------------------------------------------------------
+
+const BACKUP_FORMAT = "veto-history";
+const BACKUP_VERSION = 1;
+
+interface HistoryBackup {
+  format: typeof BACKUP_FORMAT;
+  version: number;
+  exportedAt: number;
+  reviews: StoredReview[];
+}
+
+export function exportHistory(now: number): string {
+  const backup: HistoryBackup = {
+    format: BACKUP_FORMAT,
+    version: BACKUP_VERSION,
+    exportedAt: now,
+    reviews: loadHistory(),
+  };
+  return JSON.stringify(backup, null, 2);
+}
+
+export interface ImportResult {
+  history: StoredReview[];
+  added: number;
+  updated: number;
+  skipped: number;
+}
+
+// Accepts either a wrapped backup ({format, reviews}) or a bare array, so a
+// file that predates the wrapper still restores. Merges by id: an incoming
+// review wins only if it is strictly newer, and it keeps the original
+// createdAt. Same-or-older ids are counted as skipped.
+export function importHistory(text: string): ImportResult {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    throw new Error("That file isn't valid JSON.");
+  }
+  const raw = Array.isArray(parsed)
+    ? parsed
+    : typeof parsed === "object" &&
+        parsed !== null &&
+        Array.isArray((parsed as { reviews?: unknown }).reviews)
+      ? (parsed as { reviews: unknown[] }).reviews
+      : null;
+  if (!raw) throw new Error("That file isn't a Veto history backup.");
+
+  const incoming = raw.filter(isStoredReview).map(normalizeReview);
+  if (incoming.length === 0) throw new Error("No reviews found in that backup.");
+
+  const byId = new Map(loadHistory().map((e) => [e.id, e]));
+  let added = 0;
+  let updated = 0;
+  let skipped = 0;
+  for (const entry of incoming) {
+    const existing = byId.get(entry.id);
+    if (!existing) {
+      byId.set(entry.id, entry);
+      added += 1;
+    } else if (entry.updatedAt > existing.updatedAt) {
+      byId.set(entry.id, { ...entry, createdAt: existing.createdAt });
+      updated += 1;
+    } else {
+      skipped += 1;
+    }
+  }
+  const merged = [...byId.values()].sort((a, b) => b.updatedAt - a.updatedAt);
+  return { history: persist(merged), added, updated, skipped };
+}
+
+export function backupFilename(now: number): string {
+  const d = new Date(now);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `veto-history-${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}.json`;
 }
