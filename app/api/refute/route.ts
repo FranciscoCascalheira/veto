@@ -108,9 +108,13 @@ export async function POST(req: NextRequest) {
     code?: unknown;
     challenge?: unknown;
     transcript?: unknown;
+    answers?: unknown;
   };
   const challenge = typeof body.challenge === "string" ? body.challenge.trim() : "";
   const isArgue = challenge.length > 0;
+  // Presence (a string, even empty) signals the trader has passed the intake
+  // gate: skip intake and review. Absent = first pass, intake may ask.
+  const answers = typeof body.answers === "string" ? body.answers : undefined;
 
   if (body.demo === true) {
     return demoResponse(isArgue ? DEMO_ARGUE_EVENTS : DEMO_EVENTS);
@@ -148,6 +152,12 @@ export async function POST(req: NextRequest) {
     if (thesis.length > 8000) {
       return Response.json(
         { error: "Thesis too long — keep it under 8000 characters." },
+        { status: 400 },
+      );
+    }
+    if (answers !== undefined && answers.length > 3000) {
+      return Response.json(
+        { error: "Answers too long — keep them under 3000 characters." },
         { status: 400 },
       );
     }
@@ -211,7 +221,7 @@ export async function POST(req: NextRequest) {
       try {
         const run = transcript
           ? runArgueBack(client, transcript, challenge)
-          : runRefutation(client, thesis);
+          : runRefutation(client, thesis, answers);
         for await (const event of run) {
           send(event);
         }

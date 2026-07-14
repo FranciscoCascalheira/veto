@@ -1,6 +1,15 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { EngineEvent, SourceRef, StressOutcome, TradeCard, Verdict } from "./types";
-import { STRUCTURE_SYSTEM, VERIFY_SYSTEM, argueBrief, stressBrief, verifyBrief } from "./prompts";
+import {
+  INTAKE_SYSTEM,
+  STRUCTURE_SYSTEM,
+  VERIFY_SYSTEM,
+  argueBrief,
+  clarifiedThesis,
+  intakeBrief,
+  stressBrief,
+  verifyBrief,
+} from "./prompts";
 
 const MODEL = "claude-opus-4-8";
 // The stress round adds up to two extra turns (attack + possible pause_turn)
@@ -153,6 +162,58 @@ function buildTools(): Anthropic.Messages.ToolUnion[] {
       input_schema: VERDICT_JSON_SCHEMA,
     },
   ];
+}
+
+const INTAKE_JSON_SCHEMA: Anthropic.Messages.Tool.InputSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["needs_clarification", "questions"],
+  properties: {
+    needs_clarification: {
+      type: "boolean",
+      description:
+        "True only when the thesis cannot be reviewed as written — no identifiable security, or no checkable reason at all.",
+    },
+    questions: {
+      type: "array",
+      items: { type: "string" },
+      description:
+        "Two or three sharp, concrete questions naming the specific gap. Empty when needs_clarification is false.",
+    },
+  },
+};
+
+interface IntakeDecision {
+  needs_clarification: boolean;
+  questions: string[];
+}
+
+// A cheap first pass (no web tools): can this thesis be reviewed as written,
+// or must the desk ask for specifics first? Fails open — if the decision
+// can't be parsed, the review proceeds rather than blocking on intake.
+async function runIntake(client: Anthropic, thesis: string): Promise<IntakeDecision> {
+  const response = await client.messages.create({
+    model: MODEL,
+    max_tokens: 1024,
+    system: INTAKE_SYSTEM,
+    messages: [{ role: "user", content: intakeBrief(thesis) }],
+    output_config: {
+      format: { type: "json_schema", schema: INTAKE_JSON_SCHEMA },
+    },
+  });
+  const textBlock = response.content.find((b) => b.type === "text");
+  if (!textBlock || textBlock.type !== "text") {
+    return { needs_clarification: false, questions: [] };
+  }
+  try {
+    const parsed = JSON.parse(textBlock.text) as IntakeDecision;
+    const questions = Array.isArray(parsed.questions)
+      ? parsed.questions.filter((q) => typeof q === "string" && q.trim().length > 0).slice(0, 3)
+      : [];
+    return { needs_clarification: parsed.needs_clarification === true && questions.length > 0, questions };
+  } catch {
+    return { needs_clarification: false, questions: [] };
+  }
 }
 
 async function structureCard(client: Anthropic, thesis: string): Promise<TradeCard> {
@@ -405,18 +466,33 @@ async function* emitOutcome(
   yield { t: "transcript", v: messages };
 }
 
+// `answers` distinguishes the two passes. undefined/null = first pass: run
+// intake, and stop with questions if the thesis is too vague to review. A
+// string (possibly empty) = the trader has been past intake, so skip it and
+// review; a non-empty string folds their clarifications into the thesis.
 export async function* runRefutation(
   client: Anthropic,
   thesis: string,
+  answers?: string | null,
 ): AsyncGenerator<EngineEvent> {
+  if (answers === undefined || answers === null) {
+    const intake = await runIntake(client, thesis);
+    if (intake.needs_clarification) {
+      yield { t: "questions", v: intake.questions };
+      return;
+    }
+  }
+
+  const reviewedThesis = answers ? clarifiedThesis(thesis, answers) : thesis;
+
   yield { t: "stage", v: "structuring" };
-  const card = await structureCard(client, thesis);
+  const card = await structureCard(client, reviewedThesis);
   yield { t: "card", v: card };
 
   yield { t: "stage", v: "verifying" };
 
   const messages: Anthropic.Messages.MessageParam[] = [
-    { role: "user", content: verifyBrief(card, thesis) },
+    { role: "user", content: verifyBrief(card, reviewedThesis) },
   ];
   const sources = new Map<string, SourceRef>();
   const { verdict, stress } = yield* runVerifyLoop(client, messages, sources);

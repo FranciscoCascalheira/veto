@@ -81,9 +81,12 @@ Model: `claude-opus-4-8` with server-side `web_search_20260209` +
    into a cleared browser (keeps the no-accounts stance).
 3. **Launch pack.** Publish devlog 001, write devlog 002 (the v2/v3 story),
    draft Show HN / fintwit / LinkedIn posts. Francisco does the posting.
-4. **The desk interrogates first.** A vague thesis (no invalidation, horizon,
-   or catalyst) gets 2-3 pointed questions before structuring, riding the
-   client-held continuation.
+4. **The desk interrogates first** — shipped. A thesis too thin to review (no
+   identifiable security, or no checkable reason) gets a cheap intake pass
+   (`runIntake`, no web tools) that asks 2-3 questions via `EngineEvent
+   {t:"questions"}`; the trader answers (folded into the thesis) or reviews as
+   written. `answers` on the request signals "past intake" so the second pass
+   skips it. No new history entry; the original thesis is what's stored.
 5. **Re-check all.** Batch re-check of open invalidations — cost-gated and
    explicit (each is a full argue round).
 

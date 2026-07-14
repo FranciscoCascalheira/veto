@@ -12,7 +12,7 @@ Trading journals analyze your trades after the fact. Veto attacks them **before 
 
 ## How it works
 
-1. **Structure** — your freeform thesis becomes a trade card: ticker, direction, horizon, and the falsifiable premises your argument actually depends on.
+1. **Structure** — your freeform thesis becomes a trade card: ticker, direction, horizon, and the falsifiable premises your argument actually depends on. If the thesis is too thin to review — no identifiable security, or no checkable reason at all — the desk asks two or three pointed questions first and folds your answers in (or reviews it as written, your call).
 2. **Verify** — every premise is checked against fresh web sources and classified: `CONFIRMED` / `PARTIAL` / `FALSE` / `UNVERIFIABLE`, with clickable links to the sources the desk actually used. "Confirmed from memory" doesn't exist at this desk.
 3. **Attack** — the adversarial sweep runs even when premises hold: strongest bear case, insider selling, dilution, short interest, valuation, and whether your catalyst is already priced in.
 4. **Verdict** — `BLESSED` or `REFUSED`. A false load-bearing premise is an automatic refusal. When in doubt, it refuses. And no blessing ships untested: before delivering a `BLESSED`, the desk attacks its own verdict once — hunting disconfirming evidence against the premises it just confirmed — and the blessing is upheld or withdrawn on what the attack finds.

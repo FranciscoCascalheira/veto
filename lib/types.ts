@@ -50,6 +50,9 @@ export interface SourceRef {
 
 export type EngineEvent =
   | { t: "stage"; v: "structuring" | "verifying" | "verdict" }
+  // The intake desk needs specifics before it will structure the thesis.
+  // Terminal for this request; the trader answers and submits again.
+  | { t: "questions"; v: string[] }
   | { t: "card"; v: TradeCard }
   | { t: "text"; v: string }
   | { t: "search"; v: string }

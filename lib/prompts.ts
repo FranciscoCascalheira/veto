@@ -1,5 +1,15 @@
 import type { TradeCard } from "./types";
 
+export const INTAKE_SYSTEM = `You are the intake desk at Veto, an adversarial pre-trade review. Before a thesis is structured and verified, you decide whether it can be reviewed as written.
+
+Most theses are reviewable — pass them through. Demand specifics ONLY when something essential is missing, without which an honest review is impossible:
+- no identifiable security or instrument, or
+- no checkable reason at all — a bare "it'll go up", a tip with no mechanism, pure vibes.
+
+A thesis that names a security and gives even one checkable reason is reviewable; pass it, even if it is thin — the review itself will expose thin premises. Do NOT ask questions to polish an adequate thesis. Do NOT ask for a price target, and never ask the trader what they want to hear — you ask to make the argument checkable, not to make it prettier.
+
+When you must ask, write two or three sharp, concrete questions a desk would ask across the counter — each naming the specific gap: the catalyst and its source, the timeframe, the level or event that would prove the trade wrong. Never more than three. Plain English, no preamble.`;
+
 export const STRUCTURE_SYSTEM = `You are the intake clerk at an adversarial trade-review desk called Veto.
 
 A trader hands you a freeform investment thesis. Structure it into a trade card, faithfully:
@@ -58,6 +68,35 @@ export function stressBrief(): string {
     `- Hunt disconfirming evidence specifically: search AGAINST the premises you confirmed — contradicting filings, guidance walk-backs, competitive counter-moves, crowding, a catalyst already priced in. Fresh sources only.`,
     `- This is not an invitation to fold. Withdraw the blessing only if the attack surfaces evidence that fails a desk rule; do not manufacture doubt to look rigorous.`,
     `- Then call submit_verdict exactly once more with the final verdict: BLESSED if the blessing survived — keep classifications current and sharpen the bear case and red flags with what the attack found — or REFUSED if it did not, with verdict_reason naming exactly what the stress test surfaced.`,
+  ].join("\n");
+}
+
+export function intakeBrief(thesis: string): string {
+  const today = new Date().toISOString().slice(0, 10);
+  return [
+    `Today's date: ${today}.`,
+    ``,
+    `A trader submitted this thesis for pre-trade review:`,
+    ``,
+    thesis.trim(),
+    ``,
+    `Decide whether it can be reviewed as written, or whether something essential is missing. If you must ask, keep it to two or three concrete questions.`,
+  ].join("\n");
+}
+
+// When the trader has answered the intake questions, fold their answers into
+// the thesis so the card is structured from the complete picture. Answers can
+// be empty (the trader chose to proceed without clarifying), in which case the
+// original thesis stands.
+export function clarifiedThesis(thesis: string, answers: string): string {
+  const clean = answers.trim();
+  if (!clean) return thesis;
+  return [
+    `ORIGINAL THESIS:`,
+    thesis.trim(),
+    ``,
+    `THE TRADER'S ANSWERS TO THE DESK'S CLARIFYING QUESTIONS:`,
+    clean,
   ].join("\n");
 }
 

@@ -31,7 +31,7 @@ import {
   type ExportReview,
 } from "@/lib/export";
 
-type Status = "idle" | "structuring" | "verifying" | "done" | "error";
+type Status = "idle" | "structuring" | "verifying" | "clarifying" | "done" | "error";
 
 // Every replay of the sample review lands on this one history entry, so it
 // never piles up duplicates. The re-check prefill matches the canned
@@ -89,6 +89,8 @@ export default function Home() {
   const [transcript, setTranscript] = useState<unknown[] | null>(null);
   const [isDemo, setIsDemo] = useState(false);
   const [challenge, setChallenge] = useState("");
+  const [questions, setQuestions] = useState<string[] | null>(null);
+  const [answers, setAnswers] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [history, setHistory] = useState<StoredReview[]>([]);
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
@@ -125,6 +127,10 @@ export default function Home() {
       case "stage":
         if (event.v === "structuring") setStatus("structuring");
         if (event.v === "verifying") setStatus("verifying");
+        break;
+      case "questions":
+        setQuestions(event.v);
+        setStatus("clarifying");
         break;
       case "card":
         setCard(event.v);
@@ -256,6 +262,8 @@ export default function Home() {
     setTranscript(null);
     setIsDemo(demo);
     setChallenge("");
+    setQuestions(null);
+    setAnswers("");
     setError(null);
     setCopyState("idle");
     setPngState("idle");
@@ -297,6 +305,25 @@ export default function Home() {
     }
   }
 
+  // Answer the intake desk's questions (or proceed without) and continue the
+  // same review — no new history entry, the original card/verdict populate the
+  // activeRef that run() already opened.
+  async function answerIntake(proceed: boolean) {
+    if (running) return;
+    const text = proceed ? "" : answers.trim();
+    if (!proceed && text.length < 2) return;
+    setError(null);
+    setQuestions(null);
+    setStatus("structuring");
+    if (activeRef.current) activeRef.current.thesis = thesis;
+    try {
+      await streamReview({ thesis, answers: text, code }, true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unexpected error.");
+      setStatus("error");
+    }
+  }
+
   // Restore a stored review to the screen exactly as it finished, including
   // the client-held transcript so it can be contested further.
   function reopen(entry: StoredReview, scroll = true) {
@@ -325,6 +352,8 @@ export default function Home() {
     setTranscript(entry.transcript);
     setIsDemo(entry.demo);
     setChallenge("");
+    setQuestions(null);
+    setAnswers("");
     setError(null);
     setCopyState("idle");
     setPngState("idle");
@@ -513,13 +542,59 @@ export default function Home() {
       <div ref={resultRef}>
         {status !== "idle" && (
           <section className="mt-10 space-y-6">
-            <div className="flex items-center gap-3 font-mono text-xs uppercase tracking-widest text-muted">
-              <StageDot active={status === "structuring"} done={card !== null} label="Structure" />
-              <span aria-hidden className="text-edge">—</span>
-              <StageDot active={status === "verifying"} done={verdict !== null} label="Verify + attack" />
-              <span aria-hidden className="text-edge">—</span>
-              <StageDot active={false} done={verdict !== null} label="Verdict" />
-            </div>
+            {status !== "clarifying" && (
+              <div className="flex items-center gap-3 font-mono text-xs uppercase tracking-widest text-muted">
+                <StageDot active={status === "structuring"} done={card !== null} label="Structure" />
+                <span aria-hidden className="text-edge">—</span>
+                <StageDot active={status === "verifying"} done={verdict !== null} label="Verify + attack" />
+                <span aria-hidden className="text-edge">—</span>
+                <StageDot active={false} done={verdict !== null} label="Verdict" />
+              </div>
+            )}
+
+            {status === "clarifying" && questions && (
+              <div className="animate-enter rounded-lg border border-edge bg-surface p-4">
+                <h2 className="font-mono text-xs uppercase tracking-widest text-muted">
+                  The desk needs specifics
+                </h2>
+                <p className="mt-1.5 text-xs text-muted">
+                  This thesis is too thin to review honestly yet. Answer what you
+                  can — the desk folds it in before structuring — or have it
+                  reviewed as written.
+                </p>
+                <ol className="mt-3 space-y-2 text-sm leading-relaxed">
+                  {questions.map((q, i) => (
+                    <li key={i} className="flex gap-3">
+                      <span className="mt-0.5 font-mono text-xs text-muted">{i + 1}</span>
+                      <span className="flex-1 text-foreground/90">{q}</span>
+                    </li>
+                  ))}
+                </ol>
+                <textarea
+                  name="answers"
+                  value={answers}
+                  onChange={(e) => setAnswers(e.target.value)}
+                  placeholder="Answer the desk — a source, a date, the level that would prove you wrong."
+                  rows={3}
+                  className="mt-3 w-full resize-y rounded-md border border-edge bg-surface-2 p-3 text-sm leading-relaxed text-foreground placeholder:text-muted focus:border-accent/60 focus:outline-none"
+                />
+                <div className="mt-2 flex flex-wrap items-center justify-end gap-x-4 gap-y-2">
+                  <button
+                    onClick={() => answerIntake(true)}
+                    className="-m-2 p-2 font-mono text-[11px] uppercase tracking-wider text-muted transition-colors duration-150 hover:text-foreground"
+                  >
+                    Review as written
+                  </button>
+                  <button
+                    onClick={() => answerIntake(false)}
+                    disabled={answers.trim().length < 2}
+                    className="rounded-md bg-accent px-5 py-2 text-sm font-medium text-background transition-colors duration-150 hover:bg-accent/90 disabled:opacity-40"
+                  >
+                    Answer and review
+                  </button>
+                </div>
+              </div>
+            )}
 
             {status === "structuring" && !card && (
               <div className="animate-enter rounded-lg border border-edge bg-surface p-4">

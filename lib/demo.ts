@@ -250,6 +250,7 @@ export const DEMO_ARGUE_EVENTS: EngineEvent[] = [
 
 export const DEMO_DELAYS: Record<EngineEvent["t"], number> = {
   stage: 500,
+  questions: 500,
   card: 700,
   text: 850,
   search: 650,
