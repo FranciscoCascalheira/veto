@@ -1,15 +1,26 @@
 @import "tailwindcss";
 
+/* PAPER REGISTER — VETO is now typeset like a ruling, per Francisco's B pick
+   (ai-workflow/RUBRIC.md). Ivory default; the seed's "night edition" is out of
+   scope until VETO has a theme toggle (YAGNI). Every colour used as TEXT here
+   was contrast-measured against ivory (WCAG AA ≥ 4.5), not guessed — the seed's
+   own #a06a10 was rejected because it measures 4.16, below AA. */
 :root {
-  --background: #14110d;
-  --surface: #1b1712;
-  --surface-2: #221d16;
-  --edge: #2c2620;
-  --foreground: #e9e2d4;
-  --muted: #8f8471;
-  --accent: #e8a33d;
-  --refused: #e5484d;
-  --blessed: #52a35e;
+  --background: #f7f3ea; /* ivory paper (seed --bg light) */
+  --surface: #f1ece0;    /* seed --bg-elevated */
+  --surface-2: #ebe4d4;  /* seed --bg-inset */
+  --edge: #d8cdb6;       /* ruled ink line, visible on purpose */
+  --foreground: #191510; /* warm near-black ink (16.4:1) */
+  --muted: #504a3d;      /* readable muted (7.9:1) */
+
+  /* Amber, two roles — the seed's distinction. INK for text/borders, FIELD for
+     filled surfaces (the CTA buttons — "amber as structure, not trim"). */
+  --accent: #855808;     /* amber ink as text: 5.58:1 (seed accent-strong) */
+  --field: #e3a83c;      /* flooded amber for buttons */
+  --field-ink: #211603;  /* text on the field: 8.4:1 */
+
+  --refused: #a3161a;    /* paper red as text: 7.1:1 (dark #e5484d fails at 3.5) */
+  --blessed: #2f6b41;    /* paper green as text: 5.8:1 (dark #52a35e fails at 2.8) */
 }
 
 @theme inline {
@@ -20,10 +31,13 @@
   --color-foreground: var(--foreground);
   --color-muted: var(--muted);
   --color-accent: var(--accent);
+  --color-field: var(--field);
+  --color-field-ink: var(--field-ink);
   --color-refused: var(--refused);
   --color-blessed: var(--blessed);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --font-serif: var(--font-instrument-serif), Georgia, "Times New Roman", serif;
 }
 
 body {
@@ -32,9 +46,17 @@ body {
   font-family: var(--font-geist-sans), system-ui, sans-serif;
 }
 
+/* Selection is a filled amber field, not the dark-ground inversion it was. */
 ::selection {
-  background: var(--accent);
-  color: var(--background);
+  background: var(--field);
+  color: var(--field-ink);
+}
+
+/* Tailwind v4 dropped the preflight `button { cursor: pointer }`. Without it
+   nothing signals clickability at rest — which is precisely the affordance
+   Francisco chose the paper register for. */
+button:not(:disabled) {
+  cursor: pointer;
 }
 
 @keyframes enter {
@@ -70,4 +92,18 @@ body {
   );
   background-size: 200% 100%;
   animation: shimmer 1.6s linear infinite;
+}
+
+/* The app had no reduced-motion handling at all, while a review is a long
+   sequence of arriving blocks and the skeleton shimmers forever with no way
+   out. Same resolution the seed uses: animations settle into their end state
+   instead of playing. */
+@media (prefers-reduced-motion: reduce) {
+  .animate-enter {
+    animation: none;
+  }
+  .skeleton {
+    animation: none;
+    background: var(--surface-2);
+  }
 }

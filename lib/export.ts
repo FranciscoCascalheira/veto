@@ -191,7 +191,7 @@ function readTokens() {
     edge: cssValue("--edge", "#2c2620"),
     foreground: cssValue("--foreground", "#e9e2d4"),
     muted: cssValue("--muted", "#8f8471"),
-    accent: cssValue("--accent", "#e8a33d"),
+    accent: cssValue("--accent", "#e3a83c"),
     refused: cssValue("--refused", "#e5484d"),
     blessed: cssValue("--blessed", "#52a35e"),
   };

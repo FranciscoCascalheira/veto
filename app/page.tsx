@@ -643,7 +643,7 @@ export default function Home() {
           <button
             onClick={() => run()}
             disabled={running || thesis.trim().length < 20}
-            className="rounded-md bg-accent px-5 py-2 text-sm font-medium text-background transition-colors duration-150 hover:bg-accent/90 disabled:opacity-40"
+            className="rounded-md bg-field px-5 py-2 text-sm font-medium text-field-ink transition-colors duration-150 hover:bg-field/90 disabled:opacity-40"
           >
             {running ? "Under review…" : "Submit for review"}
           </button>
@@ -705,14 +705,14 @@ export default function Home() {
                 <div className="mt-2 flex flex-wrap items-center justify-end gap-x-4 gap-y-2">
                   <button
                     onClick={() => answerIntake(true)}
-                    className="-m-2 p-2 font-mono text-[11px] uppercase tracking-wider text-muted transition-colors duration-150 hover:text-foreground"
+                    className="-m-2 p-2 font-mono text-[11px] uppercase tracking-wider text-accent transition-colors duration-150 hover:text-foreground"
                   >
                     Review as written
                   </button>
                   <button
                     onClick={() => answerIntake(false)}
                     disabled={answers.trim().length < 2}
-                    className="rounded-md bg-accent px-5 py-2 text-sm font-medium text-background transition-colors duration-150 hover:bg-accent/90 disabled:opacity-40"
+                    className="rounded-md bg-field px-5 py-2 text-sm font-medium text-field-ink transition-colors duration-150 hover:bg-field/90 disabled:opacity-40"
                   >
                     Answer and review
                   </button>
@@ -845,8 +845,13 @@ export default function Home() {
                     : "border-blessed/70 bg-blessed/5"
                 }`}
               >
+                {/* Verdict-first — the stamp is the hero, per the B preview
+                    Francisco picked. But in the document register it speaks in
+                    Instrument Serif, not a mono-bold terminal stamp: that mono
+                    weight was the last thing on the card still reading "console".
+                    See ai-workflow/RUBRIC.md. */}
                 <div
-                  className={`font-mono text-3xl font-bold tracking-[0.25em] ${
+                  className={`font-serif text-[2.5rem] leading-none tracking-[0.01em] ${
                     verdict.verdict === "REFUSED" ? "text-refused" : "text-blessed"
                   }`}
                 >
@@ -869,7 +874,12 @@ export default function Home() {
                       : "preliminary blessing withdrawn"}
                   </p>
                 )}
-                <p className="mt-3 text-sm leading-relaxed text-foreground/90">
+                {/* The desk's ruling — the one sentence the product exists to
+                    produce. It was set at text-sm, the same size as every label
+                    around it, which is what made the verdict block read flat.
+                    Serif, not italic: on the seed, italic is for quotes and
+                    asides; a ruling is neither. */}
+                <p className="mt-4 max-w-[52ch] font-serif text-2xl leading-snug text-foreground">
                   {verdict.verdict_reason}
                 </p>
 
@@ -902,7 +912,14 @@ export default function Home() {
                 )}
 
                 <VerdictSection title="Suggested invalidation">
-                  <p className="font-mono text-xs">{verdict.suggested_invalidation}</p>
+                  {/* Prose, so it reads as prose. The "this is a checkable
+                      condition" signal is already carried by the mono eyebrow
+                      above it; setting the sentence in mono too was redundant
+                      signal paid for in legibility — and it was the one line
+                      the reader has to act on. */}
+                  <p className="text-sm leading-relaxed text-foreground/85">
+                    {verdict.suggested_invalidation}
+                  </p>
                 </VerdictSection>
 
                 <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-edge pt-4">
@@ -965,7 +982,7 @@ export default function Home() {
                   <button
                     onClick={() => argue()}
                     disabled={running || challenge.trim().length < 10}
-                    className="rounded-md bg-accent px-5 py-2 text-sm font-medium text-background transition-colors duration-150 hover:bg-accent/90 disabled:opacity-40"
+                    className="rounded-md bg-field px-5 py-2 text-sm font-medium text-field-ink transition-colors duration-150 hover:bg-field/90 disabled:opacity-40"
                   >
                     {running ? "Re-reviewing…" : "Contest the verdict"}
                   </button>
@@ -982,7 +999,7 @@ export default function Home() {
                 <button
                   onClick={() => run()}
                   disabled={thesis.trim().length < 20}
-                  className="mt-3 rounded-md bg-accent px-4 py-1.5 text-sm font-medium text-background transition-colors duration-150 hover:bg-accent/90 disabled:opacity-40"
+                  className="mt-3 rounded-md bg-field px-4 py-1.5 text-sm font-medium text-field-ink transition-colors duration-150 hover:bg-field/90 disabled:opacity-40"
                 >
                   Try again
                 </button>
@@ -1025,7 +1042,7 @@ export default function Home() {
                 </button>
                 <button
                   onClick={() => setRecheckConfirm(false)}
-                  className="text-muted transition-colors duration-150 hover:text-foreground"
+                  className="text-accent transition-colors duration-150 hover:text-foreground"
                 >
                   Cancel
                 </button>
@@ -1034,7 +1051,7 @@ export default function Home() {
               recheckTargets.length >= 2 && (
                 <button
                   onClick={() => setRecheckConfirm(true)}
-                  className="font-mono text-[11px] uppercase tracking-wider text-muted transition-colors duration-150 hover:text-foreground"
+                  className="font-mono text-[11px] uppercase tracking-wider text-accent transition-colors duration-150 hover:text-foreground"
                 >
                   Re-check all
                 </button>
@@ -1082,12 +1099,12 @@ export default function Home() {
                   <button
                     onClick={() => markClosed(entry.id)}
                     disabled={recheckState?.running}
-                    className="font-mono text-[11px] uppercase tracking-wider text-muted transition-colors duration-150 hover:text-foreground disabled:cursor-not-allowed"
+                    className="font-mono text-[11px] uppercase tracking-wider text-accent transition-colors duration-150 hover:text-foreground disabled:cursor-not-allowed"
                   >
                     Mark closed
                   </button>
                 </div>
-                <p className="mt-1.5 font-mono text-xs leading-relaxed text-foreground/85">
+                <p className="mt-1.5 text-sm leading-relaxed text-foreground/85">
                   {entry.verdict.suggested_invalidation}
                 </p>
               </li>
@@ -1142,13 +1159,13 @@ export default function Home() {
             <div className="flex gap-x-4 sm:ml-auto">
               <button
                 onClick={backUpHistory}
-                className="font-mono text-[11px] uppercase tracking-wider text-muted transition-colors duration-150 hover:text-foreground"
+                className="font-mono text-[11px] uppercase tracking-wider text-accent transition-colors duration-150 hover:text-foreground"
               >
                 Back up
               </button>
               <button
                 onClick={() => fileInputRef.current?.click()}
-                className="font-mono text-[11px] uppercase tracking-wider text-muted transition-colors duration-150 hover:text-foreground"
+                className="font-mono text-[11px] uppercase tracking-wider text-accent transition-colors duration-150 hover:text-foreground"
               >
                 Import
               </button>
@@ -1170,7 +1187,7 @@ export default function Home() {
         <div className="mt-10">
           <button
             onClick={() => fileInputRef.current?.click()}
-            className="font-mono text-[11px] uppercase tracking-wider text-muted transition-colors duration-150 hover:text-foreground"
+            className="font-mono text-[11px] uppercase tracking-wider text-accent transition-colors duration-150 hover:text-foreground"
           >
             Restore a backup
           </button>
