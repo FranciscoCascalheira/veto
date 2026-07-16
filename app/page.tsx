@@ -616,6 +616,7 @@ export default function Home() {
         </p>
       </header>
 
+      <main>
       <section className="rounded-lg border border-edge bg-surface p-4">
         <textarea
           name="thesis"
@@ -1210,6 +1211,7 @@ export default function Home() {
         onChange={onImportFile}
         className="hidden"
       />
+      </main>
 
       <footer className="mt-16 border-t border-edge pt-5 text-sm leading-relaxed text-muted">
         <p>
